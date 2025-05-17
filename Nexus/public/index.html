@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Syntx Financial Dashboard</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root {
+      --sidebar-width: 20vw;
+      --primary-color: #111827;
+      --accent-color: #0ea5e9;
+      --text-color: #f3f4f6;
+      --hover-bg: #1f2937;
+      --logout-color: #ef4444;
+      --corner-radius: 16px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+      display: flex;
+      min-height: 100vh;
+      background-color: #f9fafb;
+      color: var(--text-color);
+    }
+
+    .sidebar {
+      width: var(--sidebar-width);
+      background-color: var(--primary-color);
+      display: flex;
+      flex-direction: column;
+      padding: 2rem 1rem;
+      border-top-right-radius: var(--corner-radius);
+      border-bottom-right-radius: var(--corner-radius);
+      box-shadow: 5px 0 15px rgba(0, 0, 0, 0.2);
+    }
+
+    .logo {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .logo h1 {
+      font-size: 1.5rem;
+      color: var(--accent-color);
+    }
+
+    .mantra {
+      font-size: 0.8rem;
+      color: #9ca3af;
+      text-align: center;
+      margin-top: 0.25rem;
+    }
+
+    .nav {
+      flex-grow: 1;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+      border-radius: var(--corner-radius);
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .nav-item:hover {
+      background-color: var(--hover-bg);
+    }
+
+    .nav-item i {
+      margin-right: 1rem;
+      width: 20px;
+      text-align: center;
+    }
+
+    .nav-item.logout {
+      color: var(--logout-color);
+    }
+
+    .main {
+      flex-grow: 1;
+      padding: 2rem;
+    }
+
+    .main h2 {
+      color: #111827;
+    }
+
+    .db-tabs {
+      display: flex;
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+
+    .db-tab {
+      background-color: #1e293b;
+      padding: 0.75rem 1.25rem;
+      border-radius: var(--corner-radius);
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .db-tab:hover {
+      background-color: #334155;
+    }
+
+    .status-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 0.5rem;
+    }
+
+    .status-up { background-color: #22c55e; }
+    .status-down { background-color: #f97316; }
+
+    .db-section {
+      margin-top: 2rem;
+      display: none;
+    }
+
+    .db-section.active {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto auto;
+      gap: 1.5rem;
+    }
+
+    .db-card {
+      background-color: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      border-radius: var(--corner-radius);
+      padding: 1rem;
+      color: #1f2937;
+    }
+
+    .db-card h3 {
+      margin-bottom: 0.5rem;
+    }
+
+    .db-card p {
+      font-size: 0.9rem;
+      color: #4b5563;
+    }
+
+    .db-card input, .db-card button {
+      margin-top: 0.5rem;
+      padding: 0.5rem;
+      width: 100%;
+      border-radius: 8px;
+    }
+
+    .db-card input {
+      border: 1px solid #ccc;
+    }
+
+    .db-card button {
+      border: none;
+      background-color: var(--accent-color);
+      color: white;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .db-card button:hover {
+      background-color: #0284c7;
+    }
+  </style>
+  <script>
+    function showSection(sectionId) {
+      document.querySelectorAll('.db-section').forEach(sec => sec.classList.remove('active'));
+      document.getElementById(sectionId).classList.add('active');
+    }
+
+    function showDatabase(name) {
+      // Placeholder: Logic to fetch status/data based on DB name
+      alert("Switching to " + name + " database context");
+    }
+  </script>
+</head>
+<body>
+  <div class="sidebar">
+    <div class="logo">
+      <h1>Syntx</h1>
+      <div class="mantra">follow the tao</div>
+    </div>
+    <div class="nav">
+      <div class="nav-item" onclick="showSection('dashboard')"><i class="fas fa-home"></i> Dashboard</div>
+      <div class="nav-item" onclick="showSection('databases')"><i class="fas fa-database"></i> Databases</div>
+      <div class="nav-item" onclick="showSection('algorithms')"><i class="fas fa-cogs"></i> Algorithms</div>
+      <div class="nav-item" onclick="showSection('development')"><i class="fas fa-code"></i> Development</div>
+      <div class="nav-item" onclick="showSection('clients')"><i class="fas fa-users"></i> Clients</div>
+      <div class="nav-item" onclick="showSection('settings')"><i class="fas fa-sliders-h"></i> Settings</div>
+    </div>
+    <div class="nav-item logout"><i class="fas fa-sign-out-alt"></i> Logout</div>
+  </div>
+
+  <div class="main">
+    <div class="db-tabs">
+  <div class="db-tab" onclick="showDatabase('Options')"><div class="status-indicator status-up"></div> Options</div>
+  <div class="db-tab" onclick="showDatabase('Stocks')"><div class="status-indicator status-up"></div> Stocks</div>
+  <div class="db-tab" onclick="showDatabase('Users')"><div class="status-indicator status-up"></div> Users</div>
+</div>
+
+      <div class="db-card">
+        <h3>Initialize Database</h3>
+        <p>Provide ticker, start date, and end date to initialize the options database.</p>
+        <input type="text" placeholder="Ticker">
+        <input type="date">
+        <input type="date">
+        <button>Initialize</button>
+      </div>
+      <div class="db-card">
+        <h3>Database Information</h3>
+        <p>This panel displays metadata and health of the selected database from api.syntxapp.io.</p>
+        <pre>{ "status": "UP", "rows": 1243220 }</pre>
+      </div>
+      <div class="db-card">
+        <h3>Live Logs</h3>
+        <p>Streaming logs flagged with options_database tag.</p>
+        <div style="background:#111827; color:#f3f4f6; padding:0.5rem; height:100px; overflow:auto; border-radius:8px; font-size:0.8rem">
+          [INFO] 2025-05-16 10:00:00 - Options ingestion started...<br>
+          [INFO] 2025-05-16 10:01:00 - Pulling contracts for SPY...
+        </div>
+      </div>
+      <div class="db-card">
+        <h3>Running Jobs</h3>
+        <p>List of Kubernetes containers currently active under the selected ruleset.</p>
+        <ul>
+          <li>collector-options-spy-20250516</li>
+          <li>fill-contracts-aapl-20250516</li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="dashboard" class="db-section">Dashboard content here</div>
+    <div id="algorithms" class="db-section">Algorithms content here</div>
+    <div id="development" class="db-section">Development content here</div>
+    <div id="clients" class="db-section">Clients content here</div>
+    <div id="settings" class="db-section">Settings content here</div>
+  </div>
+</body>
+</html>

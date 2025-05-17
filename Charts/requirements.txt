@@ -1,0 +1,3 @@
+httpx
+psycopg2-binary
+pytz
