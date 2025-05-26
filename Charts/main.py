@@ -1,5 +1,6 @@
 import sys
 import logging
+import os
 # Your base logging config
 logging.basicConfig(
     level=logging.INFO,
@@ -28,8 +29,9 @@ def print_help():
 📘 Syntx Function Runner Help
 
 Usage:
-  docker run --rm syntx-populator "function_name(param1, param2, ...)"
-
+  docker run --rm thales884/charts:latest "function_name(param1, param2, ...)"
+  or set EXEC_CODE env variable for dynamic execution
+          
 Available functions:
 
   populate_options(ticker: str, start_date: int, end_date: int, interval: int)
@@ -42,6 +44,10 @@ Available functions:
     - Shows this help menu.
 
 """)
+
+def test(a, b):
+    print(f"Test function called with arguments: {a}, {b}")
+    return a + b
 
 def populate_options(ticker, start_date, end_date, interval):
     if not isinstance(ticker, str) or not ticker.isalpha():
@@ -63,7 +69,7 @@ def populate_options(ticker, start_date, end_date, interval):
 def populate_stocks(ticker):
     if not isinstance(ticker, str) or not ticker.isalpha():
         print("❌ Error: 'ticker' must be a valid string (e.g. 'SPY').")
-        return
+        return  
 
     try:
         data.get_stocks_minute(ticker)
@@ -71,15 +77,19 @@ def populate_stocks(ticker):
     except Exception as e:
         print(f"❌ Failed to collect stocks for {ticker}: {e}")
 
-# if __name__ == "__main__":
-#     if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
-#         print_help()
-#         sys.exit(0)
+if __name__ == "__main__":
+    exec_code = os.environ.get("EXEC_CODE")
 
-#     try:
-#         eval(sys.argv[1])
-#     except Exception as e:
-#         print(f"❌ Error evaluating command: {e}")
-#         print("   Run with -h to see available commands and usage.")
-
-populate_stocks("SPY")
+    if exec_code:
+        try:
+            exec(exec_code)
+        except Exception as e:
+            print(f"❌ Error executing EXEC_CODE: {e}")
+    elif len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
+        print_help()
+    else:
+        try:
+            eval(sys.argv[1])
+        except Exception as e:
+            print(f"❌ Error evaluating command: {e}")
+            print("   Run with -h to see available commands and usage.")

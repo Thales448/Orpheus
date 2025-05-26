@@ -1,0 +1,232 @@
+<div class="main-content">
+  <div class="dashboard-main">
+
+    <!-- Brokers -->
+    <div class="dashboard-row">
+      <div class="dashboard-square" style="min-width:410px; flex:1.4;">
+        <h2 style="margin-bottom:1.3em;">
+          <i class="fa-solid fa-link" style="color:var(--accent); margin-right:0.65em; opacity:0.8;"></i>
+          Broker Accounts
+        </h2>
+        <table class="pretty-table" style="font-size:1.09em;">
+          <thead>
+            <tr>
+              <th>Broker</th>
+              <th>Status</th>
+              <th>Account</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Interactive Brokers</td>
+              <td><span class="badge badge-success">Connected</span></td>
+              <td>****2837</td>
+              <td><button class="small-btn" style="background:#ef4444;">Disconnect</button></td>
+            </tr>
+            <tr>
+              <td>Alpaca</td>
+              <td><span class="badge" style="background:#64748b; color:white;">Not Connected</span></td>
+              <td>-</td>
+              <td><button class="small-btn primary-btn">Connect</button></td>
+            </tr>
+            <tr>
+              <td>TD Ameritrade</td>
+              <td><span class="badge" style="background:#64748b; color:white;">Not Connected</span></td>
+              <td>-</td>
+              <td><button class="small-btn primary-btn">Connect</button></td>
+            </tr>
+            <tr>
+              <td>Tradier</td>
+              <td><span class="badge" style="background:#64748b; color:white;">Not Connected</span></td>
+              <td>-</td>
+              <td><button class="small-btn primary-btn">Connect</button></td>
+            </tr>
+            <tr>
+              <td>Webull</td>
+              <td><span class="badge" style="background:#64748b; color:white;">Not Connected</span></td>
+              <td>-</td>
+              <td><button class="small-btn primary-btn">Connect</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    <!-- Bank Account Connections -->
+    <div class="dashboard-row">
+      <div class="dashboard-square" style="min-width:410px; flex:1.1;">
+        <h2 style="margin-bottom:1.3em;">
+          <i class="fa-solid fa-university" style="color:var(--accent); margin-right:0.65em; opacity:0.8;"></i>
+          Bank Account Connections
+        </h2>
+        <table class="pretty-table" style="font-size:1.09em;">
+          <thead>
+            <tr>
+              <th>Bank</th>
+              <th>Status</th>
+              <th>Account</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Plaid</td>
+              <td><span class="badge badge-success">Connected</span></td>
+              <td>****1414</td>
+              <td><button class="small-btn" style="background:#ef4444;">Disconnect</button></td>
+            </tr>
+            <tr>
+              <td>Chase</td>
+              <td><span class="badge" style="background:#64748b; color:white;">Not Connected</span></td>
+              <td>-</td>
+              <td><button class="small-btn primary-btn">Connect</button></td>
+            </tr>
+            <tr>
+              <td>Bank of America</td>
+              <td><span class="badge" style="background:#64748b; color:white;">Not Connected</span></td>
+              <td>-</td>
+              <td><button class="small-btn primary-btn">Connect</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+      <!-- Data Subscriptions -->
+      <div class="dashboard-square" style="min-width:410px; flex:1.1;">
+        <h2 style="margin-bottom:1.3em;"><i class="fa-solid fa-database" style="color:var(--accent); margin-right:0.65em; opacity:0.8;"></i>Data Subscriptions</h2>
+        <table class="pretty-table" style="font-size:1.09em;">
+          <thead>
+            <tr>
+              <th>Source</th>
+              <th>Status</th>
+              <th>Plan</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Polygon.io</td>
+              <td><span class="badge badge-success">Active</span></td>
+              <td>Premium</td>
+              <td><button class="small-btn" style="background:#ef4444;">Unlink</button></td>
+            </tr>
+            <tr>
+              <td>IEX Cloud</td>
+              <td><span class="badge" style="background:#64748b; color:white;">Inactive</span></td>
+              <td>Free</td>
+              <td><button class="small-btn primary-btn">Connect</button></td>
+            </tr>
+            <tr>
+              <td>Yahoo Finance</td>
+              <td><span class="badge badge-success">Active</span></td>
+              <td>Standard</td>
+              <td><button class="small-btn" style="background:#ef4444;">Unlink</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- API Integrations & Cloud Storage -->
+    <div class="dashboard-row">
+      <!-- API Integrations -->
+      <div class="dashboard-square" style="min-width:410px; flex:1.1;">
+        <h2 style="margin-bottom:1.3em;"><i class="fa-solid fa-plug" style="color:var(--accent); margin-right:0.65em; opacity:0.8;"></i>API Integrations</h2>
+        <table class="pretty-table" style="font-size:1.09em;">
+          <thead>
+            <tr>
+              <th>Integration</th>
+              <th>Status</th>
+              <th>Details</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Slack Notifications</td>
+              <td><span class="badge badge-success">Connected</span></td>
+              <td>Channel: #alerts</td>
+              <td><button class="small-btn" style="background:#ef4444;">Disconnect</button></td>
+            </tr>
+            <tr>
+              <td>Zapier</td>
+              <td><span class="badge" style="background:#64748b; color:white;">Not Connected</span></td>
+              <td>-</td>
+              <td><button class="small-btn primary-btn">Connect</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <!-- Cloud Storage -->
+      <div class="dashboard-square" style="min-width:410px; flex:1.1;">
+        <h2 style="margin-bottom:1.3em;"><i class="fa-solid fa-cloud" style="color:var(--accent); margin-right:0.65em; opacity:0.8;"></i>Cloud Storage</h2>
+        <table class="pretty-table" style="font-size:1.09em;">
+          <thead>
+            <tr>
+              <th>Provider</th>
+              <th>Status</th>
+              <th>Bucket/Folder</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Amazon S3</td>
+              <td><span class="badge badge-success">Linked</span></td>
+              <td>syntx-data-prod</td>
+              <td><button class="small-btn" style="background:#ef4444;">Unlink</button></td>
+            </tr>
+            <tr>
+              <td>Google Drive</td>
+              <td><span class="badge" style="background:#64748b; color:white;">Not Linked</span></td>
+              <td>-</td>
+              <td><button class="small-btn primary-btn">Connect</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- User Access & Permissions -->
+    <div class="dashboard-row">
+      <div class="dashboard-square" style="min-width:410px; flex:1;">
+        <h2 style="margin-bottom:1.3em;"><i class="fa-solid fa-users" style="color:var(--accent); margin-right:0.65em; opacity:0.8;"></i>User Access & Permissions</h2>
+        <table class="pretty-table" style="font-size:1.09em;">
+          <thead>
+            <tr>
+              <th>User/App</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Last Access</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>jsmith@syntx.io</td>
+              <td>Admin</td>
+              <td><span class="badge badge-success">Active</span></td>
+              <td>2025-05-20 12:40</td>
+              <td><button class="small-btn" style="background:#ef4444;">Revoke</button></td>
+            </tr>
+            <tr>
+              <td>api-client-prod</td>
+              <td>API Key</td>
+              <td><span class="badge badge-success">Active</span></td>
+              <td>2025-05-22 06:10</td>
+              <td><button class="small-btn" style="background:#ef4444;">Revoke</button></td>
+            </tr>
+            <tr>
+              <td>janedoe@syntx.io</td>
+              <td>User</td>
+              <td><span class="badge" style="background:#64748b; color:white;">Invited</span></td>
+              <td>-</td>
+              <td><button class="small-btn primary-btn">Resend Invite</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>

@@ -1,0 +1,211 @@
+<div class="main-content">
+  <div class="dashboard-main">
+
+    <!-- 1. Account Balance and Snapshot Row -->
+    <div class="dashboard-row" style="gap:2.3em;">
+      <div class="dashboard-square" style="flex:1.1; min-width:250px; padding:2em 1.7em;">
+        <h3 style="color:var(--accent); font-size:1.22em;">Total Account Balance</h3>
+        <div style="font-size:2.3em; color:#38bdf8; font-weight:700; margin-bottom:0.15em;">$1,150,230</div>
+        <div class="desc-text" style="color:#22c55e;">+3.2% today</div>
+      </div>
+      <div class="dashboard-square" style="flex:0.8; min-width:220px; padding:2em 1.7em;">
+        <h3 style="color:var(--accent); font-size:1.12em;">Cash Available</h3>
+        <div style="font-size:1.7em; color:#38bdf8; font-weight:600; margin-bottom:0.12em;">$150,500</div>
+      </div>
+      <div class="dashboard-square" style="flex:1.2; min-width:260px; padding:2em 1.7em;">
+        <h3 style="color:var(--accent); font-size:1.13em;">Open Risk Metrics</h3>
+        <div style="display:flex; flex-direction:column; gap:0.45em;">
+          <span>Beta: <b style="color:#f59e42;">0.88</b></span>
+          <span>Sharpe Ratio: <b style="color:#22c55e;">1.28</b></span>
+          <span>Delta (Portfolio): <b style="color:#38bdf8;">+15,240</b></span>
+        </div>
+      </div>
+      <div class="dashboard-square" style="flex:1.3; min-width:280px; padding:2em 1.7em;">
+        <h3 style="color:var(--accent); font-size:1.13em;">Recent Performance</h3>
+        <div style="display:flex; flex-direction:column; gap:0.45em;">
+          <span>Today: <b style="color:#22c55e;">+$3,620</b></span>
+          <span>This Month: <b style="color:#38bdf8;">+$12,840</b></span>
+          <span>This Year: <b style="color:#38bdf8;">+$52,410</b></span>
+          <span>All Time: <b style="color:#38bdf8;">+$213,500</b></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Algorithm Performance Overview & PnL Trend -->
+    <div class="dashboard-row" style="gap:2.3em;">
+      <div class="dashboard-square" style="flex:2.2; min-width:510px;">
+        <h2 style="margin-bottom:1em;">
+          <i class="fa-solid fa-bolt" style="color:var(--accent); margin-right:0.65em;"></i>
+          Algorithm Performance
+        </h2>
+        <table class="pretty-table" style="font-size:1.09em;">
+          <thead>
+            <tr>
+              <th>Algorithm</th>
+              <th>Status</th>
+              <th>Today's Return</th>
+              <th>MTD</th>
+              <th>YTD</th>
+              <th>All-Time</th>
+              <th>Risk (σ)</th>
+              <th>Sharpe</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>SMA-Cross</td>
+              <td><span class="badge badge-success">Running</span></td>
+              <td>+1.4%</td>
+              <td>+3.2%</td>
+              <td>+7.9%</td>
+              <td>+39.3%</td>
+              <td>1.12</td>
+              <td>1.21</td>
+            </tr>
+            <tr>
+              <td>Pairs Trading</td>
+              <td><span class="badge badge-success">Running</span></td>
+              <td>+0.7%</td>
+              <td>+2.2%</td>
+              <td>+5.1%</td>
+              <td>+24.4%</td>
+              <td>0.97</td>
+              <td>1.03</td>
+            </tr>
+            <tr>
+              <td>Options Arb</td>
+              <td><span class="badge" style="background:#64748b; color:white;">Paused</span></td>
+              <td>-0.3%</td>
+              <td>+1.8%</td>
+              <td>+8.3%</td>
+              <td>+16.8%</td>
+              <td>1.03</td>
+              <td>1.15</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="dashboard-square" style="flex:1.5; min-width:370px; display:flex; flex-direction:column; align-items:center;">
+        <h2 style="margin-bottom:1em;"><i class="fa-solid fa-chart-line" style="color:var(--accent); margin-right:0.6em;"></i>PnL Over Time</h2>
+        <canvas id="pnl-trend" width="300" height="170" style="background:rgba(16,25,40,0.96); border-radius:10px;"></canvas>
+      </div>
+    </div>
+
+    <!-- 3. Live Trades View -->
+    <div class="dashboard-row">
+      <div class="dashboard-square" style="min-width:520px; flex:2;">
+        <h2 style="margin-bottom:1em;">
+          <i class="fa-solid fa-circle-nodes" style="color:var(--accent); margin-right:0.7em;"></i>
+          Live Trades
+        </h2>
+        <table class="pretty-table" style="font-size:1.06em;">
+          <thead>
+            <tr>
+              <th>Algo</th>
+              <th>Symbol</th>
+              <th>Position</th>
+              <th>Entry</th>
+              <th>Current</th>
+              <th>P&L</th>
+              <th>Trade Age</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>SMA-Cross</td>
+              <td>SPY</td>
+              <td>Long 100</td>
+              <td>$432.10</td>
+              <td>$436.70</td>
+              <td style="color:#22c55e;">+$460</td>
+              <td>2h 19m</td>
+              <td><span class="badge badge-success">Open</span></td>
+            </tr>
+            <tr>
+              <td>Pairs Trading</td>
+              <td>AAPL/MSFT</td>
+              <td>Short 50 / Long 60</td>
+              <td>$185.10 / $343.20</td>
+              <td>$181.40 / $345.10</td>
+              <td style="color:#22c55e;">+$228</td>
+              <td>1d 3h</td>
+              <td><span class="badge badge-success">Open</span></td>
+            </tr>
+            <tr>
+              <td>Options Arb</td>
+              <td>SPY</td>
+              <td>Call Spread</td>
+              <td>$1.45</td>
+              <td>$1.22</td>
+              <td style="color:#ef4444;">-$23</td>
+              <td>5h 11m</td>
+              <td><span class="badge" style="background:#64748b; color:white;">Closing</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <!-- News Log Card -->
+      <div class="dashboard-square" style="min-width:330px; flex:1.1;">
+        <h2 style="margin-bottom:1em;">
+          <i class="fa-solid fa-newspaper" style="color:var(--accent); margin-right:0.65em;"></i>
+          News & Insights
+        </h2>
+        <div style="max-height:280px; overflow-y:auto;">
+          <ul style="padding-left:1.3em; margin:0;">
+            <li>
+              <b style="color:#38bdf8;">SPY</b>: <span style="color:#dbeafe;">Fed signals potential rate pause, markets rally. <a href="#" style="color:#60a5fa;">(Bloomberg)</a></span>
+            </li>
+            <li>
+              <b style="color:#38bdf8;">AAPL</b>: <span style="color:#dbeafe;">Apple unveils new AI chip. <a href="#" style="color:#60a5fa;">(Reuters)</a></span>
+            </li>
+            <li>
+              <b style="color:#38bdf8;">MSFT</b>: <span style="color:#dbeafe;">Microsoft cloud earnings beat estimates. <a href="#" style="color:#60a5fa;">(WSJ)</a></span>
+            </li>
+            <li>
+              <b style="color:#38bdf8;">General Market</b>: <span style="color:#dbeafe;">VIX drops to 18-month low, volatility abates. <a href="#" style="color:#60a5fa;">(CNBC)</a></span>
+            </li>
+            <li>
+              <b style="color:#38bdf8;">TSLA</b>: <span style="color:#dbeafe;">Tesla secures new battery supply contract. <a href="#" style="color:#60a5fa;">(MarketWatch)</a></span>
+            </li>
+          </ul>
+        </div>
+        <div class="desc-text" style="margin-top:1.4em;">Latest headlines linked to your portfolio positions.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Example chart for PnL (use Chart.js) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  // PnL Trend Demo Data
+  const pnlCtx = document.getElementById('pnl-trend').getContext('2d');
+  new Chart(pnlCtx, {
+    type: 'line',
+    data: {
+      labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+      datasets: [{
+        label: 'PnL',
+        data: [1200, 1550, 1300, 1890, 2130],
+        fill: true,
+        backgroundColor: 'rgba(56,189,248,0.07)',
+        borderColor: '#38bdf8',
+        borderWidth: 2.8,
+        pointBackgroundColor: '#22c55e',
+        pointRadius: 4,
+        tension: 0.42,
+      }]
+    },
+    options: {
+      plugins: {
+        legend: { display: false }
+      },
+      scales: {
+        x: { ticks: { color: '#b3bac8', font: { size: 14 } }, grid: { display: false } },
+        y: { ticks: { color: '#b3bac8', font: { size: 13 } }, grid: { color: '#22334c55' } }
+      }
+    }
+  });
+</script>

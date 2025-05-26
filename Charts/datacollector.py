@@ -6,8 +6,8 @@ import pytz
 from psycopg2 import sql
 from psycopg2.extras import execute_values
 import logging
-import Charts.config
-from Charts.conn import DatabaseConnection
+import config
+from conn import DatabaseConnection
 import httpx
 
 logger = logging.getLogger(__name__)

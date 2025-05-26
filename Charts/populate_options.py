@@ -122,3 +122,6 @@ def populate_options(ticker, start_date, end_date, interval):
                     logger.exception(f"[{ticker} {expiration}] ❌ Error for window {window_start}–{window_end}: {e}")
 
     runmain(ticker, start_date, end_date, interval)
+
+
+

@@ -7,55 +7,117 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     :root {
-      --sidebar-width: 20vw;
-      --primary-color: #111827;
-      --accent-color: #0ea5e9;
-      --text-color: #f3f4f6;
-      --hover-bg: #1f2937;
-      --logout-color: #ef4444;
-      --corner-radius: 16px;
+      --sidebar-width: 250px;
+      --main-bg: #0b1120;
+      --panel-bg: #161e2e;
+      --card-bg: #101928;
+      --accent: #0ea5e9;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --gray: #9ca3af;
+      --text-main: #e0e7ef;
+      --text-light: #b3bac8;
+      --border: #293249;
+      --shadow: 0 4px 28px #222b4455, 0 0 4px #36b2fa22;
+      --radius: 18px;
     }
 
-    * {
-      box-sizing: border-box;
+        #notification-container {
+      position: fixed;
+      top: 2rem;
+      right: 2rem;
+      z-index: 9999;
+      max-width: 380px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5em;
+      pointer-events: none;
+    }
+    .notification {
+      background: #101928;
+      color: #22c55e;
+      padding: 0.9em 1.4em;
+      border-radius: 1em;
+      box-shadow: 0 2px 18px #36b2fa33;
+      font-size: 1.06em;
+      margin-bottom: 0.5em;
+      pointer-events: all;
+      transition: opacity 0.2s;
+    }
+    .notification.error { color: #fff; background: #ef4444; }
+
+    * { box-sizing: border-box; }
+    
+    html, body {
       margin: 0;
       padding: 0;
+      min-height: 100vh;
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--main-bg);
+      color: var(--text-main);
     }
 
     body {
       display: flex;
       min-height: 100vh;
-      background-color: #f9fafb;
-      color: var(--text-color);
     }
+        .primary-btn, .refresh-btn {
+      background: #0ea5e9;
+      color: white;
+      border: none;
+      padding: 0.6em 1.2em;
+      border-radius: 8px;
+      font-size: 1em;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background 0.14s;
+    }
+    .primary-btn:hover, .refresh-btn:hover { background: #0369a1; }
+    .small-btn {
+      color: white;
+      border: none;
+      padding: 0.3em 0.6em;
+      border-radius: 7px;
+      font-size: 1em;
+      cursor: pointer;
+      margin-left: 0.5em;
+    }
+    .badge-success { background: #22c55e; color: white; padding: 0.17em 0.7em; border-radius: 1em; }
+    .badge { font-weight: 600; }
 
+
+    /* Sidebar */
     .sidebar {
       width: var(--sidebar-width);
-      background-color: var(--primary-color);
+      background: var(--panel-bg);
       display: flex;
       flex-direction: column;
-      padding: 2rem 1rem;
-      border-top-right-radius: var(--corner-radius);
-      border-bottom-right-radius: var(--corner-radius);
-      box-shadow: 5px 0 15px rgba(0, 0, 0, 0.2);
+      justify-content: flex-start;
+      align-items: stretch;
+      padding: 2rem 1rem 1rem 1rem;
+      border-top-right-radius: var(--radius);
+      border-bottom-right-radius: var(--radius);
+      box-shadow: 5px 0 24px #000a 0 0 2px #36b2fa22;
     }
 
     .logo {
       text-align: center;
-      margin-bottom: 2rem;
+      margin-bottom: 2.5rem;
+      letter-spacing: 2px;
     }
-
     .logo h1 {
-      font-size: 1.5rem;
-      color: var(--accent-color);
+      font-size: 2rem;
+      color: var(--accent);
+      margin: 0;
+      font-weight: 700;
     }
-
     .mantra {
-      font-size: 0.8rem;
-      color: #9ca3af;
-      text-align: center;
-      margin-top: 0.25rem;
+      font-size: 0.90rem;
+      color: var(--gray);
+      margin-top: 0.35em;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      font-weight: 400;
     }
 
     .nav {
@@ -65,190 +127,222 @@
     .nav-item {
       display: flex;
       align-items: center;
-      padding: 0.75rem 1rem;
+      padding: 0.75rem 1.2rem;
       margin-bottom: 1rem;
-      border-radius: var(--corner-radius);
+      border-radius: var(--radius);
+      font-size: 1.1rem;
+      color: var(--text-light);
+      background: none;
+      border: none;
+      transition: background 0.2s, color 0.2s;
       cursor: pointer;
-      transition: background-color 0.2s;
+      gap: 1rem;
     }
-
-    .nav-item:hover {
-      background-color: var(--hover-bg);
-    }
-
     .nav-item i {
-      margin-right: 1rem;
-      width: 20px;
+      font-size: 1.2em;
+      min-width: 24px;
       text-align: center;
     }
-
+    .nav-item.active,
+    .nav-item:hover {
+      background: linear-gradient(90deg, #101828 70%, #16375b 120%);
+      color: var(--accent);
+      font-weight: 500;
+    }
     .nav-item.logout {
-      color: var(--logout-color);
+      color: var(--danger);
+      margin-top: 2rem;
+      background: none;
+    }
+    .nav-item.logout:hover {
+      background: #1a1120;
+      color: #fff;
     }
 
+    /* Main content area */
     .main {
-      flex-grow: 1;
-      padding: 2rem;
-    }
-
-    .main h2 {
-      color: #111827;
-    }
-
-    .db-tabs {
+      flex: 1;
+      padding: 2.5rem 3vw 2.5rem 3vw;
+      min-height: 100vh;
+      background: var(--main-bg);
       display: flex;
-      gap: 1rem;
-      margin-top: 2rem;
+      flex-direction: column;
+      align-items: stretch;
+      overflow-x: auto;
     }
-
-    .db-tab {
-      background-color: #1e293b;
-      padding: 0.75rem 1.25rem;
-      border-radius: var(--corner-radius);
-      display: flex;
-      align-items: center;
-      cursor: pointer;
-      transition: background-color 0.2s;
-    }
-
-    .db-tab:hover {
-      background-color: #334155;
-    }
-
-    .status-indicator {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      margin-right: 0.5rem;
-    }
-
-    .status-up { background-color: #22c55e; }
-    .status-down { background-color: #f97316; }
-
-    .db-section {
-      margin-top: 2rem;
-      display: none;
-    }
-
-    .db-section.active {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: auto auto;
-      gap: 1.5rem;
-    }
-
-    .db-card {
-      background-color: #f3f4f6;
-      border: 1px solid #e5e7eb;
-      border-radius: var(--corner-radius);
-      padding: 1rem;
-      color: #1f2937;
-    }
-
-    .db-card h3 {
-      margin-bottom: 0.5rem;
-    }
-
-    .db-card p {
-      font-size: 0.9rem;
-      color: #4b5563;
-    }
-
-    .db-card input, .db-card button {
-      margin-top: 0.5rem;
-      padding: 0.5rem;
+    .main-content {
       width: 100%;
-      border-radius: 8px;
+      margin: 0 auto;
+      max-width: 1500px;
+      display: flex;
+      flex-direction: column;
+      gap: 2.5rem;
+      padding-top: 0.5rem;
     }
 
-    .db-card input {
-      border: 1px solid #ccc;
+    h1, h2, h3, h4, h5 {
+      color: var(--accent);
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      margin-bottom: 1rem;
+      margin-top: 0;
+    }
+    h2 { font-size: 1.35rem; }
+    h3 { font-size: 1.14rem; color: var(--gray);}
+    h4 { font-size: 1.05rem; color: var(--gray);}
+    p, ul, li, label, th, td, span {
+      color: var(--text-main);
+      font-size: 1.02em;
+      line-height: 1.55;
+      font-weight: 400;
+    }
+    /* Cards & Panels */
+    .stat-card, .dashboard-square {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.3rem 1.7rem;
+      margin-bottom: 1rem;
+      border: 1px solid var(--border);
+      min-width: 140px;
+      min-height: 68px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      transition: box-shadow 0.17s, border 0.18s;
+    }
+    .stat-card:hover, .dashboard-square:hover {
+      box-shadow: 0 4px 32px #0ea5e988, 0 0 8px #36b2fa44;
+      border: 1px solid #60a5fa;
     }
 
-    .db-card button {
-      border: none;
-      background-color: var(--accent-color);
-      color: white;
-      cursor: pointer;
-      transition: background-color 0.2s;
+    /* Tables */
+    .pretty-table {
+      background: #141b2e;
+      border-radius: 14px;
+      overflow: hidden;
+      margin-bottom: 2rem;
+      box-shadow: 0 2px 18px #22335518;
+      width: 100%;
+    }
+    .pretty-table th, .pretty-table td {
+      padding: 0.7em 1.15em;
+      text-align: left;
+      border-bottom: 1px solid #22334c77;
+      color: var(--text-main);
+      font-size: 1em;}
+    .status-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--success); }
+    .flex-row { display: flex; align-items: center; gap: 0.7em; }
+    .flex-column { display: flex; flex-direction: column; gap: 0.5em; }
+    .desc-text { color: var(--text-light); font-size: 0.96em; }
+    .disk-bar-container { width: 100%; background: #eee; border-radius: 10px; height: 16px; position: relative; cursor: pointer; }
+    .disk-bar { background: linear-gradient(90deg, #0ea5e9, #38bdf8); height: 100%; border-radius: 10px 0 0 10px; transition: width 0.5s; }
+
+    .pretty-table thead th {
+      background: #162239;
+      color: #60a5fa;
+      font-weight: 600;
+      font-size: 1.08em;
+    }
+    .pretty-table tbody tr:hover {
+      background: #233052;
     }
 
-    .db-card button:hover {
-      background-color: #0284c7;
+    /* Dashboard layout grid */
+    .dashboard-main {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2.5rem;
+    }
+    .dashboard-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2rem;
+      margin-bottom: 1.7rem;
+    }
+    .dashboard-square {
+      flex: 1 1 360px;
+      min-width: 340px;
+      max-width: 100vw;
+      margin: 0;
+    }
+    #workload-module {
+      grid-column: 1/-1;
+    }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .dashboard-row { flex-direction: column; gap: 1.25rem; }
+      .dashboard-main { padding: 0 1vw; }
+      .sidebar { width: 70vw; min-width: 170px; }
+    }
+    @media (max-width: 600px) {
+      .sidebar { display: none; }
+      .main { padding: 1.5rem 1vw; }
     }
   </style>
-  <script>
-    function showSection(sectionId) {
-      document.querySelectorAll('.db-section').forEach(sec => sec.classList.remove('active'));
-      document.getElementById(sectionId).classList.add('active');
-    }
-
-    function showDatabase(name) {
-      // Placeholder: Logic to fetch status/data based on DB name
-      alert("Switching to " + name + " database context");
-    }
-  </script>
+  <script src="modules/runchartsjob.js" defer></script>
+  <script src="modules/tabs.js" defer></script>
 </head>
 <body>
+    <!-- Put this at the top of your body, after opening <body> and before any page/app container -->
+  <div id="bg-vscode"
+      style="position: fixed; inset: 0; z-index: 0; background: url('/static/vscode-bg.png') center center / cover no-repeat; opacity: 0.13; filter: blur(1.5px) grayscale(0.1); pointer-events: none;">
+  </div>
+
   <div class="sidebar">
     <div class="logo">
       <h1>Syntx</h1>
       <div class="mantra">follow the tao</div>
     </div>
     <div class="nav">
-      <div class="nav-item" onclick="showSection('dashboard')"><i class="fas fa-home"></i> Dashboard</div>
-      <div class="nav-item" onclick="showSection('databases')"><i class="fas fa-database"></i> Databases</div>
-      <div class="nav-item" onclick="showSection('algorithms')"><i class="fas fa-cogs"></i> Algorithms</div>
-      <div class="nav-item" onclick="showSection('development')"><i class="fas fa-code"></i> Development</div>
-      <div class="nav-item" onclick="showSection('clients')"><i class="fas fa-users"></i> Clients</div>
-      <div class="nav-item" onclick="showSection('settings')"><i class="fas fa-sliders-h"></i> Settings</div>
+      <div class="nav-item active" onclick="loadTab('dashboard', this)"><i class="fas fa-home"></i> Dashboard</div>
+      <div class="nav-item" onclick="loadTab('databases', this)"><i class="fas fa-database"></i> Databases</div>
+      <div class="nav-item" onclick="loadTab('algorithms', this)"><i class="fas fa-cogs"></i> Algorithms</div>
+      <div class="nav-item" onclick="loadTab('development', this)"><i class="fas fa-code"></i> Development</div>
+      <div class="nav-item" onclick="loadTab('clients', this)"><i class="fas fa-users"></i> Clients</div>
+      <div class="nav-item" onclick="loadTab('settings', this)"><i class="fas fa-sliders-h"></i> Settings</div>
     </div>
     <div class="nav-item logout"><i class="fas fa-sign-out-alt"></i> Logout</div>
   </div>
 
   <div class="main">
-    <div class="db-tabs">
-  <div class="db-tab" onclick="showDatabase('Options')"><div class="status-indicator status-up"></div> Options</div>
-  <div class="db-tab" onclick="showDatabase('Stocks')"><div class="status-indicator status-up"></div> Stocks</div>
-  <div class="db-tab" onclick="showDatabase('Users')"><div class="status-indicator status-up"></div> Users</div>
-</div>
-
-      <div class="db-card">
-        <h3>Initialize Database</h3>
-        <p>Provide ticker, start date, and end date to initialize the options database.</p>
-        <input type="text" placeholder="Ticker">
-        <input type="date">
-        <input type="date">
-        <button>Initialize</button>
-      </div>
-      <div class="db-card">
-        <h3>Database Information</h3>
-        <p>This panel displays metadata and health of the selected database from api.syntxapp.io.</p>
-        <pre>{ "status": "UP", "rows": 1243220 }</pre>
-      </div>
-      <div class="db-card">
-        <h3>Live Logs</h3>
-        <p>Streaming logs flagged with options_database tag.</p>
-        <div style="background:#111827; color:#f3f4f6; padding:0.5rem; height:100px; overflow:auto; border-radius:8px; font-size:0.8rem">
-          [INFO] 2025-05-16 10:00:00 - Options ingestion started...<br>
-          [INFO] 2025-05-16 10:01:00 - Pulling contracts for SPY...
+    <div id="main-content" class="main-content">
+      <!-- Dynamic tab content will be injected here -->
+      <div class="dashboard-main">
+        <div class="dashboard-row">
+          <div class="dashboard-square">
+            <h2>Welcome to Syntx</h2>
+            <p>This is your financial algorithm terminal. Use the sidebar to navigate between dashboards, manage databases, run algorithms, and control your infrastructure like a pro.</p>
+          </div>
         </div>
       </div>
-      <div class="db-card">
-        <h3>Running Jobs</h3>
-        <p>List of Kubernetes containers currently active under the selected ruleset.</p>
-        <ul>
-          <li>collector-options-spy-20250516</li>
-          <li>fill-contracts-aapl-20250516</li>
-        </ul>
-      </div>
     </div>
-
-    <div id="dashboard" class="db-section">Dashboard content here</div>
-    <div id="algorithms" class="db-section">Algorithms content here</div>
-    <div id="development" class="db-section">Development content here</div>
-    <div id="clients" class="db-section">Clients content here</div>
-    <div id="settings" class="db-section">Settings content here</div>
   </div>
+  <script>
+    // Improved tab loader: updates active class and loads tab content, keeping the global skeleton
+    function loadTab(tabName, el) {
+      // Set active style
+      document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+      if (el) el.classList.add('active');
+      // Load content
+      const contentEl = document.getElementById('main-content');
+      fetch(tabName + '.html')
+        .then(r => r.ok ? r.text() : Promise.reject('Not found'))
+        .then(html => {
+          contentEl.innerHTML = html;
+        })
+        .catch(err => {
+          contentEl.innerHTML = `<div class="dashboard-main"><div class="dashboard-square"><h2>Tab not found</h2><p style="color:#ef4444">Could not load <b>${tabName}.html</b>.</p></div></div>`;
+        });
+    }
+
+    // Optional: auto-load dashboard tab on first load
+    window.addEventListener('DOMContentLoaded', () => {
+      loadTab('dashboard', document.querySelector('.nav-item.active'));
+    });
+  </script>
 </body>
 </html>

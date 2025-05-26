@@ -6,7 +6,10 @@ import os
 import logging
 from typing import Union, Optional
 import datetime
+from datetime import timedelta
+from dotenv import load_dotenv
 
+load_dotenv()
 logger = logging.getLogger(__name__)
 
 class DatabaseConnection():
@@ -18,11 +21,11 @@ class DatabaseConnection():
         try:
             
             self.connection = psycopg2.connect(
-                dbname = "historical",
-                user = "syntxdb-super",
-                password = "wucpeH32621",
-                host = "192.168.1.149",
-                port = 35432
+                dbname=os.environ["DB_NAME"],
+                user=os.environ["DB_USER"],
+                password=os.environ["DB_PASSWORD"],
+                host=os.environ["DB_HOST"],
+                port=os.environ["DB_PORT"]
             )
             """
             # DB in JUPITER
@@ -958,6 +961,142 @@ class DatabaseConnection():
             self.logger.error(f"Error retrieving option data: {e}")
             raise e
 
+    def get_option_quotes_by_ticker_expiration(self, ticker, expiration_date, start_time, end_time, interval_ms):
+        """
+        Fetches quote data for a given ticker and expiration date within a time range, sampled at `interval_ms` resolution.
+        
+        :param ticker: Ticker symbol (str)
+        :param expiration_date: Expiration date (datetime or ISO string)
+        :param start_time: Start of the time range (datetime)
+        :param end_time: End of the time range (datetime)
+        :param interval_ms: Interval in milliseconds between sampled points
+        :return: List of (time, contract_id, bid, ask, bid_size, ask_size) tuples
+        """
+        try:
+            with self.connection.cursor() as cursor:
+                # Get ticker ID
+                cursor.execute("SELECT id FROM options.tickers WHERE ticker = %s", (ticker,))
+                result = cursor.fetchone()
+                if not result:
+                    self.logger.error(f"❌ Ticker '{ticker}' not found.")
+                    return []
+                ticker_id = result[0]
 
+                # Get contract IDs with matching expiration
+                cursor.execute("""
+                    SELECT id FROM options.contracts
+                    WHERE ticker_id = %s AND expiration = %s
+                """, (ticker_id, expiration_date))
+                contract_ids = [row[0] for row in cursor.fetchall()]
+                if not contract_ids:
+                    self.logger.warning(f"⚠️ No contracts found for ticker {ticker} expiring on {expiration_date}")
+                    return []
 
-    
+                # Interval control: we reduce result set by bucketing timestamps
+                interval = timedelta(milliseconds=interval_ms)
+
+                # Build query using filtered contract_ids
+                cursor.execute(f"""
+                    SELECT DISTINCT ON (contract_id, time_bucket_gapfill(%s, time)) 
+                        time, contract_id, bid, ask, bid_size, ask_size
+                    FROM options.quotes
+                    WHERE contract_id = ANY(%s)
+                    AND time BETWEEN %s AND %s
+                    ORDER BY contract_id, time_bucket_gapfill(%s, time), time
+                """, (interval, contract_ids, start_time, end_time, interval))
+
+                rows = cursor.fetchall()
+                return rows
+
+        except Exception as e:
+            self.logger.error(f"❌ Error querying quotes for {ticker} expiring {expiration_date}: {e}")
+            return []
+
+    def explore_contracts(self, ticker):
+        """
+        Diagnoses the contracts and quotes in the DB for a given ticker.
+        Allows interactive filtering to refine exploration.
+        """
+        import pandas as pd
+
+        try:
+            with self.connection.cursor() as cursor:
+                # Step 1: Get Ticker ID
+                cursor.execute("SELECT id FROM options.tickers WHERE ticker = %s", (ticker,))
+                result = cursor.fetchone()
+                if not result:
+                    self.logger.error(f"❌ Ticker '{ticker}' not found.")
+                    return []
+                ticker_id = result[0]
+
+                # Step 2: Fetch contract metadata
+                cursor.execute("""
+                    SELECT id, expiration, strike, side
+                    FROM options.contracts
+                    WHERE ticker_id = %s
+                    ORDER BY expiration, strike
+                """, (ticker_id,))
+                contracts = cursor.fetchall()
+
+                if not contracts:
+                    self.logger.warning(f"⚠️ No contracts found for ticker '{ticker}'")
+                    return []
+
+                df = pd.DataFrame(contracts, columns=['id', 'expiration', 'strike', 'side'])
+                df['expiration'] = pd.to_datetime(df['expiration'])
+
+                # Step 3: Log summary stats
+                total = len(df)
+                calls = (df['side'] == 'C').sum()
+                puts = (df['side'] == 'P').sum()
+                self.logger.info(f"🔍 Ticker: {ticker}")
+                self.logger.info(f"🧾 Total contracts: {total} | Calls: {calls} | Puts: {puts}")
+                self.logger.info(f"📆 Expiration range: {df['expiration'].min().date()} → {df['expiration'].max().date()}")
+                self.logger.info(f"💰 Strike range: {df['strike'].min()} → {df['strike'].max()}")
+
+                print("\n🎯 Sample of grouped contracts:\n")
+                grouped = df.groupby(['expiration', 'side'])['strike'].apply(list).reset_index()
+                print(grouped.to_string(index=False))
+
+                # Step 4: User chooses filter
+                print("\n💡 Now define your filter criteria.\n")
+                start_exp = pd.to_datetime(input("Start expiration (YYYY-MM-DD): "))
+                end_exp = pd.to_datetime(input("End expiration (YYYY-MM-DD): "))
+                strike_min = float(input("Min strike: "))
+                strike_max = float(input("Max strike: "))
+                side = input("Side (C/P/both): ").upper()
+
+                filtered = df[
+                    (df['expiration'] >= start_exp) &
+                    (df['expiration'] <= end_exp) &
+                    (df['strike'] >= strike_min) &
+                    (df['strike'] <= strike_max)
+                ]
+
+                if side in ['C', 'P']:
+                    filtered = filtered[filtered['side'] == side]
+
+                selected_contract_ids = filtered['id'].tolist()
+
+                self.logger.info(f"✅ Filtered contracts: {len(selected_contract_ids)}")
+
+                # Step 5: Get quote stats for those contracts
+                cursor.execute(f"""
+                    SELECT contract_id, COUNT(*), MIN(time), MAX(time)
+                    FROM options.quotes
+                    WHERE contract_id = ANY(%s)
+                    GROUP BY contract_id
+                    ORDER BY COUNT(*) DESC
+                """, (selected_contract_ids,))
+                quote_stats = cursor.fetchall()
+                print("\n📊 Quote stats per contract_id:")
+                for cid, count, min_t, max_t in quote_stats:
+                    print(f"  🧩 ID {cid}: {count} rows from {min_t} → {max_t}")
+
+                return selected_contract_ids
+
+        except Exception as e:
+            self.logger.error(f"❌ Error exploring contracts for {ticker}: {e}")
+            return []
+
+        
