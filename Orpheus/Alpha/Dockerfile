@@ -1,4 +1,4 @@
-FROM aaronmboyd/vectorbt-base
+FROM thales884/alpha:1
 
 USER root
 
@@ -17,9 +17,7 @@ COPY requirements.txt /tmp/requirements.txt
 
 # Install Python packages
 RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r /tmp/requirements.txt && \
-    pip install --upgrade "notebook>=7.1.0" "jupyterlab>=4.0.0"\
-    pip install git+https://github.com/Thales448/Orpheus.git@main
+    pip install --no-cache-dir git+https://github.com/Thales448/Orpheus.git@main
 
 EXPOSE 8888
 
