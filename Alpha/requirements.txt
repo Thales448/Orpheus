@@ -1,0 +1,39 @@
+# Data & Utilities
+numpy>=1.20
+pandas
+scipy
+requests
+tqdm
+dateparser
+dill
+pytz
+schedule
+mypy_extensions
+typing_extensions
+
+# Visualization
+matplotlib
+seaborn
+plotly>=5.0.0,<6.0.0
+ipywidgets>=7.0.0
+
+# Financial
+yfinance>=0.2.22
+ccxt>=4.0.14
+python-binance
+alpaca-py
+vectorbt
+quantstats>=0.0.37
+pandas-ta
+ta
+statsmodels
+
+# Machine Learning
+scikit-learn
+xgboost
+
+# Jupyter
+jupyterthemes
+
+# Messaging/Integration (optional)
+python-telegram-bot>=13.4,<20.0

@@ -252,11 +252,11 @@ router.get('/contract/overview', async (req, res) => {
 //10. High level stats of tables
 router.get('/summary', async (req, res) => {
   // 1. Full database size (correct)
-  const dbSizeRes = await pool.query(`SELECT pg_database_size(current_database()) AS size_bytes`);
+  const dbSizeRes = await db.query(`SELECT pg_database_size(current_database()) AS size_bytes`);
   const totalDbSizeBytes = parseInt(dbSizeRes.rows[0].size_bytes);
 
   // 2. Regular tables (options, public) using total_relation_size
-  const tableRes = await pool.query(`
+  const tableRes = await db.query(`
     SELECT table_schema, table_name,
            pg_total_relation_size(quote_ident(table_schema) || '.' || quote_ident(table_name)) AS size_bytes
     FROM information_schema.tables
@@ -264,14 +264,14 @@ router.get('/summary', async (req, res) => {
   `);
 
   // 3. Timescale hypertables (in your DB)
-  const hypertableRes = await pool.query(`
+  const hypertableRes = await db.query(`
     SELECT hypertable_schema, hypertable_name
     FROM timescaledb_information.hypertables
     WHERE hypertable_schema IN ('options', 'public')
   `);
 
   // 4. Get chunk sizes for all hypertables (returns one row per chunk)
-  const chunkSizesRes = await pool.query(`
+  const chunkSizesRes = await db.query(`
     SELECT hypertable_schema, hypertable_name,
            pg_total_relation_size(format('%I.%I', chunk_schema, chunk_name)::regclass) AS chunk_size_bytes
     FROM timescaledb_information.chunks

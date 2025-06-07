@@ -2,8 +2,8 @@ import sys
 sys.path.append("/workspace/QuantLab")
 
 from fastapi import FastAPI, Request
-from Charts.conn import DatabaseConnection
-from Charts.datacollector import DataCollector
+from Orpheus.Charts.DatabaseConnection import DatabaseConnection
+from Orpheus.Charts.DataCollector import DataCollector
 from Charts.watchlists import WatchlistLogic
 from Charts.streamer import CreateStream
 import Charts.config as config

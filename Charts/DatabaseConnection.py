@@ -8,6 +8,7 @@ from typing import Union, Optional
 import datetime
 from datetime import timedelta
 from dotenv import load_dotenv
+from pathlib import Path
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -19,7 +20,6 @@ class DatabaseConnection():
     def __init__(self):
         self.logger = logger
         try:
-            
             self.connection = psycopg2.connect(
                 dbname=os.environ["DB_NAME"],
                 user=os.environ["DB_USER"],
@@ -27,22 +27,20 @@ class DatabaseConnection():
                 host=os.environ["DB_HOST"],
                 port=os.environ["DB_PORT"]
             )
-            """
-            # DB in JUPITER
-            self.connection = psycopg2.connect(
-                dbname = "orpheus",
-                user = "syntx",
-                password = "syntx725",
-                host = "192.168.1.149",
-                port = 5432
-            )
-            """
-            self.cursor = self.connection.cursor()
-            #self.logger.info("Database connection established.")
-        
-        except psycopg2.Error as e:
-            self.logger.error(f'Error connecting to database: {e}')
-            raise e
+        except Exception as e:
+            print("Initial DB connection failed with env vars, loading .env...")
+            load_dotenv(dotenv_path=Path(__file__).parent / '.env')
+            try:
+                self.connection = psycopg2.connect(
+                    dbname=os.getenv("DB_NAME"),
+                    user=os.getenv("DB_USER"),
+                    password=os.getenv("DB_PASSWORD"),
+                    host=os.getenv("DB_HOST"),
+                    port=os.getenv("DB_PORT")
+                )
+            except Exception as e2:
+                print("Failed to connect using .env as well:", e2)
+                raise e2  # or handle as needed
     
     def close(self):
         try:
@@ -208,61 +206,21 @@ class DatabaseConnection():
             self.logger.error(f"Error inserting NBBO quotes: {e}")
             raise e
         
-    def insert_stocks_realtime(self, data):
-        insert_query = """
-            INSERT INTO stocks.realtime (symbol, ask, asksize, bid, bidsize, mid, last, volume, time)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s , %s)
-            ON CONFLICT (symbol) 
-            DO UPDATE SET
-                ask = EXCLUDED.ask,
-                asksize = EXCLUDED.asksize,
-                bid = EXCLUDED.bid,
-                bidsize = EXCLUDED.bidsize,
-                mid = EXCLUDED.mid,
-                last = EXCLUDED.last,
-                volume = EXCLUDED.volume;
-        """
-        try:
-            with self.connection.cursor() as cursor:
-                cursor.execute(insert_query, data)
-                self.connection.commit()
-                self.logger.info(f"Inserted Quotes Successfuly")
-        except psycopg2.Error as e:
-            self.connection.rollback()
-            self.logger.error(f"Error inserting/updating stock realtime data: {str(e)}")
-            self.close()
-            raise e
 
-    def insert_stock_daily(self, data):
+    def insert_stock_candles(self, data):
         insert_query = """
-            INSERT INTO stocks.daily (symbol, time, open, high, low, close, volume)
+            INSERT INTO stocks.candles (ticker_id, time, open, high, low, close, volume)
             VALUES %s
-            ON CONFLICT (symbol, time) DO NOTHING;
+            ON CONFLICT (ticker_id, time) DO NOTHING;
         """
         try:
             with self.connection.cursor() as cursor:
                 extras.execute_values(cursor, insert_query, data)
                 self.connection.commit()
-                self.logger.info("Data insert into stocks.daily successful.")
+                self.logger.info(f"Inserted {len(data)} stock candle rows into stocks.candles")
         except psycopg2.Error as e:
             self.connection.rollback()
-            self.logger.error(f"Error inserting stock daily data: {e}")
-            raise e
-
-    def insert_stock_minute(self, data):
-        insert_query = """
-            INSERT INTO stocks.minute (symbol, time, open, high, low, close, volume)
-            VALUES %s
-            ON CONFLICT (symbol, time) DO NOTHING;
-        """
-        try:
-            with self.connection.cursor() as cursor:
-                extras.execute_values(cursor, insert_query, data)
-                self.connection.commit()
-                self.logger.info("Data insert into stocks.minute successful.")
-        except psycopg2.Error as e:
-            self.connection.rollback()
-            self.logger.error(f"Error inserting stock historical data: {e}")
+            self.logger.error(f"Error inserting stock candle data: {e}")
             raise e
 
     def insert_crypto(self, coin = str, data = list):
@@ -362,7 +320,7 @@ class DatabaseConnection():
         with self.connection.cursor() as cursor:
             if type(root) == int:
                 cursor.execute("""
-                SELECT ticker FROM options.tickers
+                SELECT ticker FROM public.tickers
                 WHERE id=%s
                 """, (root,))
                 result = cursor.fetchone()
@@ -370,7 +328,7 @@ class DatabaseConnection():
                     return result[0]
 
             cursor.execute("""
-                SELECT id FROM options.tickers
+                SELECT id FROM public.tickers
                 WHERE ticker=%s
            """, (root,))
 
@@ -379,7 +337,7 @@ class DatabaseConnection():
                 return result[0]
             
             cursor.execute("""
-            INSERT INTO options.tickers (ticker)
+            INSERT INTO public.tickers (ticker)
             VALUES (%s)
             RETURNING id
             """, (root,))
@@ -480,7 +438,8 @@ class DatabaseConnection():
                 end_time = datetime.datetime.now().strftime("%Y-%m-%d")  # Get today's date in the "YYYY-MM-DD" format
             
             # Start building the SQL query
-            where_clause = f"WHERE symbol = %s"
+            ticker_id = self.get_or_create_root(ticker)
+            where_clause = f"WHERE ticker_id = ticker_id"
             
             # Add date filters if start_time or end_time are provided
             if start_time:
@@ -491,7 +450,7 @@ class DatabaseConnection():
             if resolution == "minute":
                 query = f"""
                     SELECT time, open, high, low, close, volume
-                    FROM stocks.minute
+                    FROM stocks.candles
                     {where_clause}
                     ORDER BY time ASC;
                 """
@@ -505,7 +464,7 @@ class DatabaseConnection():
                         )
                         date_trunc('minute', time) - ((EXTRACT(MINUTE FROM time)::int %% {interval}) * INTERVAL '1 minute') AS bar_time,
                         open, high, low, close, volume
-                        FROM stocks.minute
+                        FROM stocks.candles
                         {where_clause}
                         ORDER BY date_trunc('minute', time) - ((EXTRACT(MINUTE FROM time)::int %% {interval}) * INTERVAL '1 minute'), time
                     )
@@ -519,7 +478,7 @@ class DatabaseConnection():
                         SELECT DISTINCT ON (date_trunc('hour', time))
                             date_trunc('hour', time) AS hour_time,
                             open, high, low, close, volume
-                        FROM stocks.minute
+                        FROM stocks.candles
                         {where_clause}
                         ORDER BY date_trunc('hour', time), time
                     )
@@ -530,7 +489,7 @@ class DatabaseConnection():
             elif resolution == "daily":
                 query = f"""
                     SELECT time, open, high, low, close, volume
-                    FROM stocks.daily
+                    FROM stocks.candles
                     {where_clause}
                     ORDER BY time ASC;
                 """
@@ -541,7 +500,7 @@ class DatabaseConnection():
                         SELECT DISTINCT ON (date_trunc('week', time))
                             date_trunc('week', time) AS week_time,
                             open, high, low, close, volume
-                        FROM stocks.daily
+                        FROM stocks.candles
                         {where_clause}
                         ORDER BY date_trunc('week', time), time
                     )
@@ -555,7 +514,7 @@ class DatabaseConnection():
                         SELECT DISTINCT ON (date_trunc('month', time))
                             date_trunc('month', time) AS month_time,
                             open, high, low, close, volume
-                        FROM stocks.daily
+                        FROM stocks.candles
                         {where_clause}
                         ORDER BY date_trunc('month', time), time
                     )

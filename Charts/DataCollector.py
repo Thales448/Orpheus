@@ -6,8 +6,8 @@ import pytz
 from psycopg2 import sql
 from psycopg2.extras import execute_values
 import logging
-import config
-from conn import DatabaseConnection
+from Orpheus.Charts import config
+from Orpheus.Charts.DatabaseConnection import DatabaseConnection
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -270,11 +270,11 @@ class DataCollector():
         else:
             logger.info(f'Failed API call for {ticker} minute stock: {response.status_code} for url: {url}')
             return None
-
+        ticker_id = self.db.get_or_create_root(ticker)
         for i in range(0, len(data['t'])-1):
             
             data_tuple = (
-                ticker, 
+                ticker_id, 
                 self.timestamp_to_datetime(data['t'][i]), 
                 data['o'][i], 
                 data['h'][i], 
@@ -285,15 +285,15 @@ class DataCollector():
             ticker_list.append(data_tuple)
 
         logger.info(f"Collected {ticker} minute prices for the past {for_the_past_x_days} days for a total of {len(data['t'])}")
-        self.db.insert_stock_minute(ticker_list)
-
-    def get_stocks_10year_daily(self, ticker):
+        self.db.insert_stock_candles(ticker_list)
+        
+    def get_stocks_daily(self, ticker):
         end_date = date.today()
         start_date = end_date - (timedelta(365)*10)
-        
+        params = {'symbol': ticker, 'interval': 'daily', 'start': start_date, 'end': end_date, 'session_filter': 'all'}
         response = requests.get(
             self.config.HISTORY_URL,
-            params=  {'symbol': ticker, 'interval': 'daily', 'start': start_date, 'end': end_date, 'session_filter': 'all'},
+            params=  params,
             headers=self.config.HEADERS
             )
 
@@ -303,12 +303,13 @@ class DataCollector():
                 self.logger.info(f'Empty API Return for {ticker} perhaps its mispelled?')
                 return
         else:
-            self.logger.info(f'Failed to call data: {response.status_code} for url: {url}')
+            self.logger.info(f'Failed to call data: {response.status_code} for url: {params}')
+        ticker_id = self.db.get_or_create_root(ticker)
 
         data_tuples = [
             (
-                ticker,
-                entry["date"],
+                ticker_id,
+                f"{entry['date']} 16:30:00",
                 entry["open"],
                 entry["high"],
                 entry["low"],
@@ -317,7 +318,8 @@ class DataCollector():
             )
             for entry in data["history"]["day"]
         ]
-        self.db.insert_stock_daily(data_tuples)
+        logger.info(f"Collected {ticker} daily prices for a total of {len(data_tuples)} entries")
+        self.db.insert_stock_candles(data_tuples)
 
     def update_stocks_quote(self, ticker):
 

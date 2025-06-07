@@ -16,9 +16,9 @@ logging.getLogger("requests").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 logger.info("🚀 SyntxCharts container started...")
-from conn import DatabaseConnection
+from Orpheus.Charts.DatabaseConnection import DatabaseConnection
 import config
-from datacollector import DataCollector
+from Orpheus.Charts.DataCollector import DataCollector
 
 # Init shared resources
 db = DatabaseConnection()
