@@ -1,0 +1,14 @@
+2025-12-23 03:46:45,116 - __main__ - INFO - Starting historical stock ingestion service
+2025-12-23 03:46:45,118 - __main__ - ERROR - Failed to initialize service: name 'DatabaseConnection' is not defined
+Traceback (most recent call last):
+  File "/home/r/Workspace/Orpheus/Charts/ingest-historical/ingest_historical_stock.py", line 381, in initialize
+    self.db = DatabaseConnection()
+              ^^^^^^^^^^^^^^^^^^
+NameError: name 'DatabaseConnection' is not defined
+2025-12-23 21:20:49,578 - __main__ - INFO - Starting historical stock ingestion service
+2025-12-23 21:20:49,581 - __main__ - ERROR - Failed to initialize service: name 'DatabaseConnection' is not defined
+Traceback (most recent call last):
+  File "/home/r/Workspace/Orpheus/Charts/ingest-historical/ingest_historical_stock.py", line 348, in initialize
+    self.db = DatabaseConnection()
+              ^^^^^^^^^^^^^^^^^^
+NameError: name 'DatabaseConnection' is not defined

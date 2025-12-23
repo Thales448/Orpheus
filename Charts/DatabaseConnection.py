@@ -1,4 +1,3 @@
-
 import psycopg2
 from psycopg2 import sql, extras
 import datetime
@@ -45,13 +44,12 @@ class DatabaseConnection():
     
     def close(self):
         try:
-            if self.cursor:
-                self.cursor.close()
-                self.logger.info('Database cursor closed.')
-            if self.connection:
+            if hasattr(self, 'connection') and self.connection:
                 self.connection.close()
                 self.logger.info("Database connection closed.")
         except psycopg2.Error as e:
+            self.logger.error(f"Error closing the database connection {e}")
+        except Exception as e:
             self.logger.error(f"Error closing the database connection {e}")
      
     def insert_option_ohlc(self, data, theta=False):
@@ -146,65 +144,47 @@ class DatabaseConnection():
             self.connection.rollback()
             self.logger.error(f"Error inserting expiration dates for ticker ID {sid}: {e}")
   
-    def insert_stocks_quotes(self, records):
+    def insert_stocks_quote(self, records):
         """
-        Inserts a list of NBBO quote records into the stocks.nbbo_quotes table.
-        Assumes the records are dictionaries with fields:
-        ['symbol', 'timestamp', 'bid_size', 'bid_exchange', 'bid', 'bid_condition',
-        'ask_size', 'ask_exchange', 'ask', 'ask_condition', 'date']
+        Inserts a list of quote tuples into the stocks.quote table.
+        Each tuple should have the form:
+        (timestamp, ticker_id, bid, bid_size, bid_exchange, bid_condition,
+         ask, ask_size, ask_exchange, ask_condition)
+        Example:
+            (datetime.datetime(2025, 1, 3, 9, 30), 29, 587.49, 4, 64, 0, 587.53, 5, 7, 0)
         """
 
         if not records:
-            self.logger.warning("No NBBO quote records to insert.")
+            self.logger.warning("No SEC quote records to insert.")
             return
 
-        insert_ticker_query = """
-            INSERT INTO stocks.tickers (symbol)
-            VALUES (%s)
-            ON CONFLICT (symbol) DO NOTHING;
-        """
-
         insert_quote_query = """
-            INSERT INTO stocks.nbbo_quotes (
-                time, symbol, bid_size, bid_exchange, bid, bid_condition,
-                ask_size, ask_exchange, ask, ask_condition, date
+            INSERT INTO stocks.quote (
+                timestamp,
+                ticker_id,
+                bid,
+                bid_size,
+                bid_exchange,
+                bid_condition,
+                ask,
+                ask_size,
+                ask_exchange,
+                ask_condition
             ) VALUES %s
             ON CONFLICT DO NOTHING;
         """
 
         try:
-            with self.connection.cursor() as cursor:
-                # Ensure all ticker symbols are in the tickers table
-                symbols = set(record['symbol'] for record in records)
-                for symbol in symbols:
-                    cursor.execute(insert_ticker_query, (symbol,))
-                
-                # Format data for bulk insert
-                values = [
-                    (
-                        record['timestamp'],
-                        record['symbol'],
-                        record['bid_size'],
-                        record['bid_exchange'],
-                        record['bid'],
-                        record['bid_condition'],
-                        record['ask_size'],
-                        record['ask_exchange'],
-                        record['ask'],
-                        record['ask_condition'],
-                        record['date']
-                    )
-                    for record in records
-                ]
+            from psycopg2.extras import execute_values
 
-                from psycopg2.extras import execute_values
-                execute_values(cursor, insert_quote_query, values)
+            with self.connection.cursor() as cursor:
+                execute_values(cursor, insert_quote_query, records)
                 self.connection.commit()
-                self.logger.info(f"Inserted {len(values)} NBBO quotes into stocks.nbbo_quotes.")
+                self.logger.info(f"Inserted {len(records)} SEC quotes into stocks.quotes.")
 
         except Exception as e:
             self.connection.rollback()
-            self.logger.error(f"Error inserting NBBO quotes: {e}")
+            self.logger.error(f"Error inserting SEC quotes: {e}")
             raise e
         
     def insert_stock_candles(self, data):
@@ -436,7 +416,6 @@ class DatabaseConnection():
             self.logger.error(f"❌ Failed to get expirations for {ticker}: {e}")
             return []
 
-
     def get_stock_data(self, ticker: str, resolution: str = "daily", start_time: str = None, end_time: str = None):
             """
             Retrieve stock OHLCV data for a specified ticker and time resolution.
@@ -569,6 +548,76 @@ class DatabaseConnection():
                 self.logger.error(f"Error retrieving stock data: {e}")
                 raise e
     
+    def get_stock_quotes(self, ticker: str, date: str = None, interval: str = "1s", start_time: str = None, end_time: str = None):
+        """
+        Retrieve stock quotes for a specified ticker and time range.
+
+        Parameters:
+            ticker (str): The ticker symbol or identifier.
+            date (str, optional): Single day in 'YYYY-MM-DD' format (only if start_time/end_time not given).
+            interval (str): Only allowed value is "1s", which returns raw quotes. (Kept for compatibility)
+            start_time (str, optional): Start datetime 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DD'.
+            end_time (str, optional): End datetime 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DD'.
+
+        Returns:
+            List[Tuple]: Each tuple structure exactly as in insert_stocks_quote():
+                (timestamp, ticker_id, bid, bid_size, bid_exchange, bid_condition,
+                 ask, ask_size, ask_exchange, ask_condition)
+        """
+        if interval != "1s":
+            self.logger.error(f"Only interval='1s' is supported for get_stock_quotes.")
+            return []
+
+        # Determine ticker_id (from public.tickers)
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute("SELECT id FROM public.tickers WHERE ticker = %s", (ticker,))
+                res = cursor.fetchone()
+                if not res:
+                    self.logger.error(f"Ticker '{ticker}' not found in database.")
+                    return []
+                ticker_id = res[0]
+        except Exception as e:
+            self.logger.error(f"Error fetching ticker_id for {ticker}: {e}")
+            raise e
+
+        time_condition = ""
+        params = [ticker_id]
+        if date and not (start_time or end_time):
+            time_condition = "AND DATE(timestamp) = %s"
+            params.append(date)
+        elif start_time and end_time:
+            time_condition = "AND timestamp BETWEEN %s AND %s"
+            params.extend([start_time, end_time])
+        elif start_time and not end_time:
+            time_condition = "AND timestamp >= %s"
+            params.append(start_time)
+        elif end_time and not start_time:
+            time_condition = "AND timestamp <= %s"
+            params.append(end_time)
+        # else: use all times for that ticker
+
+        select_fields = """
+            timestamp, ticker_id, bid, bid_size, bid_exchange, bid_condition,
+            ask, ask_size, ask_exchange, ask_condition
+        """
+        order_by = "ORDER BY timestamp ASC"
+
+        query = f"""
+            SELECT {select_fields}
+            FROM stocks.quote
+            WHERE ticker_id = %s {time_condition}
+            {order_by};
+        """
+
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute(query, tuple(params))
+                rows = cursor.fetchall()
+                return rows
+        except Exception as e:
+            self.logger.error(f"Error retrieving stock quote data: {e}")
+            raise e
     def get_crypto_data(self, coin: str, resolution: str = "daily"):
         """
         Retrieve crypto OHLCV data for a specified coin and time resolution
@@ -835,7 +884,6 @@ class DatabaseConnection():
             self.logger.error(f"Error retrieving option data: {e}")
             raise e
 
-
     def get_option_chain(self, ticker, expiration, start_time=None, end_time=None, interval=None, side=None):
         try:
             with self.connection.cursor() as cursor:
@@ -943,7 +991,6 @@ class DatabaseConnection():
         except Exception as e:
             self.logger.error(f"❌ Error fetching option chain: {e}")
             return pd.DataFrame()
-
 
 
     def explore_contracts(self, ticker):

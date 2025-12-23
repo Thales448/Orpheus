@@ -6,9 +6,11 @@ import pytz
 from psycopg2 import sql
 from psycopg2.extras import execute_values
 import logging
-import Charts.config as config
-from Charts.DatabaseConnection import DatabaseConnection
+import DatabaseConnection
 import httpx
+import csv
+HEADERS ='hello'
+
 
 logger = logging.getLogger(__name__)
 
@@ -16,48 +18,220 @@ class DataCollector():
     """
     This Class connects multiple providers of data into one object
     """
-    def __init__(self, db, config):
+    def __init__(self, db):
         self.db = db
-        self.config = config
         self.logger = logger
     def collect_expiration_dates(self, paramaters):
         """
-        Paramaters needed: 
+        Collect expiration dates for options.
         
-        "root":string
-
+        Parameters needed:
+        - "symbol": string - The underlying symbol
+        
+        Returns:
+        - List of expiration dates or None if error
         """
-
-        url = 'http://127.0.0.1:25510/v2/list/expirations'
-
-        while url is not None:
-            response = httpx.get(url, params=paramaters, timeout=60)  # make the request
-            response.raise_for_status() 
-
-            if 'Next-Page' in response.headers and response.headers['Next-Page'] != "null":
-                url = response.headers['Next-Page']
-                params = None
-            else:
-                url = None
+        url = 'http://127.0.0.1:25510/v3/list/expirations'
+        
         try:
+            while url is not None:
+                response = httpx.get(url, params=paramaters, timeout=60)
+                response.raise_for_status() 
+
+                if 'Next-Page' in response.headers and response.headers['Next-Page'] != "null":
+                    url = response.headers['Next-Page']
+                    paramaters = None
+                else:
+                    url = None
             
             return response.json()['response']
         except Exception as e:
-            # Optionally log the error
+            self.logger.error(f"Error collecting expiration dates: {e}")
             return None
 
-    def populate_options(self, ticker, start_date, end_date, interval):
+    def theta_options_quotes(
+        self,
+        symbol: str,
+        date: str,
+        end_date: str = None,
+        expiration: str = "*",
+        strike: str = "*",
+        right: str = "both",
+        interval: str = "1m",
+        start_time: str = "09:30:00",
+        end_time: str = "16:00:00",
+        format: str = "csv",
+        base_url: str = "http://localhost:25503/v3"
+    ) -> list:
+        """
+        Fetches option quote data from Theta Terminal v3 API.
+        Returns NBBO quotes as tuples (time, contract_id, bid, bid_size, bid_exchange, bid_condition, ask, ask_size, ask_exchange, ask_condition).
+        
+        Parameters:
+            symbol (str): Underlying symbol (e.g., 'AAPL')
+            date (str): Date in YYYYMMDD format (required)
+            end_date (str): End date in YYYYMMDD format (optional)
+            expiration (str): Expiration in YYYYMMDD/YYYY-MM-DD or '*' for all (default: '*')
+            strike (str): Strike price or '*' for all (default: '*')
+            right (str): 'call', 'put', or 'both' (default: 'both')
+            interval (str): Time interval (default: '1m')
+            start_time (str): Start time HH:MM:SS (default: '09:30:00')
+            end_time (str): End time HH:MM:SS (default: '16:00:00')
+            format (str): Response format (default: 'csv')
+            base_url (str): API base URL (default: 'http://localhost:25503/v3')
+        """
+        from datetime import datetime, timedelta
+        import io
+        
+        url = f"{base_url}/option/history/quote"
+        
+        # Build date list
+        dates_to_fetch = [date]
+        if end_date and end_date != date:
+            start_dt = datetime.strptime(date, "%Y%m%d")
+            end_dt = datetime.strptime(end_date, "%Y%m%d")
+            dates_to_fetch = []
+            current_dt = start_dt
+            while current_dt <= end_dt:
+                dates_to_fetch.append(current_dt.strftime("%Y%m%d"))
+                current_dt += timedelta(days=1)
+        
+        all_results = []
+        contract_cache = {}  # Cache contract IDs: (symbol, expiration, strike, right) -> contract_id
+        
+        for fetch_date in dates_to_fetch:
+            params = {
+                "symbol": symbol,
+                "date": fetch_date,
+                "expiration": expiration,
+                "strike": strike,
+                "right": right,
+                "interval": interval,
+                "start_time": start_time,
+                "end_time": end_time,
+                "format": format
+            }
+            
+            try:
+                with httpx.stream("GET", url, params=params, timeout=60) as response:
+                    response.raise_for_status()
+                    first_line = True
+                    
+                    for line in response.iter_lines():
+                        line = line.decode() if hasattr(line, "decode") else line
+                        if not line.strip():
+                            continue
+                        
+                        # Skip header
+                        if first_line:
+                            first_line = False
+                            if 'symbol' in line.lower() or 'timestamp' in line.lower():
+                                continue
+                        
+                        try:
+                            row = next(csv.reader(io.StringIO(line)))
+                            if len(row) < 13:
+                                continue
+                            
+                            # Parse CSV: symbol, expiration, strike, right, timestamp, bid_size, bid_exchange, bid, bid_condition, ask_size, ask_exchange, ask, ask_condition
+                            sym, exp_str, strike_str, right_str, timestamp_str = row[0], row[1], row[2], row[3], row[4]
+                            bid_size, bid_exchange, bid, bid_condition = int(row[5]), int(row[6]), float(row[7]), int(row[8])
+                            ask_size, ask_exchange, ask, ask_condition = int(row[9]), int(row[10]), float(row[11]), int(row[12])
+                            
+                            # Parse timestamp
+                            try:
+                                if 'T' in timestamp_str:
+                                    timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                                else:
+                                    timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S.%f")
+                            except ValueError:
+                                try:
+                                    timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+                                except ValueError:
+                                    self.logger.warning(f"Could not parse timestamp '{timestamp_str}'")
+                                    continue
+                            
+                            # Convert expiration to integer YYYYMMDD
+                            try:
+                                if '-' in exp_str:
+                                    exp_dt = datetime.strptime(exp_str, "%Y-%m-%d")
+                                else:
+                                    exp_dt = datetime.strptime(exp_str, "%Y%m%d")
+                                expiration_int = int(exp_dt.strftime("%Y%m%d"))
+                            except ValueError:
+                                self.logger.warning(f"Could not parse expiration '{exp_str}'")
+                                continue
+                            
+                            # Convert strike to numeric
+                            try:
+                                strike_float = float(strike_str)
+                            except ValueError:
+                                self.logger.warning(f"Could not parse strike '{strike_str}'")
+                                continue
+                            
+                            # Get or create contract (with caching)
+                            contract_key = (sym, expiration_int, strike_float, right_str)
+                            if contract_key not in contract_cache:
+                                contract_meta = {
+                                    'root': sym,
+                                    'expiration': expiration_int,
+                                    'strike': strike_float,
+                                    'right': right_str
+                                }
+                                contract_id = self.db.get_or_create_contract(contract_meta)
+                                if contract_id is None:
+                                    continue
+                                contract_cache[contract_key] = contract_id
+                            else:
+                                contract_id = contract_cache[contract_key]
+                            
+                            # Build tuple: (time, contract_id, bid, bid_size, bid_exchange, bid_condition, ask, ask_size, ask_exchange, ask_condition)
+                            all_results.append((
+                                timestamp,
+                                contract_id,
+                                bid,
+                                bid_size,
+                                bid_exchange,
+                                bid_condition,
+                                ask,
+                                ask_size,
+                                ask_exchange,
+                                ask_condition
+                            ))
+                        except (ValueError, IndexError) as e:
+                            self.logger.warning(f"Could not parse row: {line[:100]} -> {e}")
+                            continue
+                            
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 472:
+                    self.logger.info(f"No data available for {symbol} on {fetch_date} (HTTP 472)")
+                else:
+                    self.logger.error(f"HTTP error fetching data for {symbol} on {fetch_date}: {e}")
+                continue
+            except Exception as e:
+                self.logger.error(f"Unexpected error fetching data for {symbol} on {fetch_date}: {e}")
+                continue
+        
+        if all_results:
+            self.logger.info(f"Collected {len(all_results)} option quote records for {symbol}.")
+        else:
+            self.logger.warning(f"No valid option quote records were parsed for {symbol}.")
+        
+        return all_results
+
+
+    def populate_options(self, ticker, date, end_date, interval):
         import httpx
 
         import time
         from datetime import datetime, timedelta
 
-        API_QUOTES_URL = "http://192.168.1.138:25510/v2/bulk_hist/option/quote"
-        API_EXPIRATIONS_URL = "http://192.168.1.138:25510/v2/list/expirations"
+        API_QUOTES_URL = "http://192.168.1.138:25503/v3/bulk_hist/option/quote"
+        API_EXPIRATIONS_URL = "http://192.168.1.138:25503/v3/option/list/expirations"
         RETRIES = 3
         RETRY_DELAY = 5 
         
-        def build_date_windows(expiration, start_date_bound=None, end_date_bound=None):
+        def build_date_windows(expiration, date_bound=None, end_date_bound=None):
             try:
                 expiration_str = str(expiration)
                 expiration_date = datetime.strptime(expiration_str, "%Y%m%d")
@@ -65,16 +239,16 @@ class DataCollector():
                 raise ValueError(f"❌ Invalid expiration '{expiration}': {e}")
 
             # Default range: 210 days before expiration to 1 day before expiration
-            start_date = expiration_date - timedelta(days=210)
+            date = expiration_date - timedelta(days=210)
             end_cutoff = expiration_date - timedelta(days=1)
 
             # Apply bounds if provided
-            if start_date_bound:
+            if date_bound:
                 try:
-                    start_date_str = str(start_date_bound)
-                    start_date = max(start_date, datetime.strptime(start_date_str, "%Y%m%d"))
+                    date_str = str(date_bound)
+                    date = max(date, datetime.strptime(date_str, "%Y%m%d"))
                 except Exception as e:
-                    raise ValueError(f"❌ Invalid start_date_bound '{start_date_bound}': {e}")
+                    raise ValueError(f"❌ Invalid date_bound '{date_bound}': {e}")
 
             if end_date_bound:
                 try:
@@ -85,7 +259,7 @@ class DataCollector():
 
             # Build windows
             windows = []
-            current_day = start_date
+            current_day = date
             while current_day < end_cutoff:
                 days_to_exp = (expiration_date - current_day).days
                 step = timedelta(days=30 if days_to_exp > 180 else 20 if days_to_exp > 7 else 5)
@@ -114,25 +288,25 @@ class DataCollector():
                     else:
                         raise e
 
-        def runmain(ticker, start_date, end_date, interval):
+        def runmain(ticker, date, end_date, interval):
             try:
-                response = safe_http_get(API_EXPIRATIONS_URL, params={"root": ticker})
+                response = safe_http_get(API_EXPIRATIONS_URL, params={"symbol": ticker})
                 if response is None:
                     logger.info(f"[{ticker}] ⚠️ Skipping due to 472 response")
                     return
                 expirations = response.json().get('response', [])
-                filtered_expirations = [e for e in expirations if int(start_date) <= e <= int(end_date)]
+                filtered_expirations = [e for e in expirations if int(date) <= e <= int(end_date)]
             except Exception as e:
                 logger.exception(f"[{ticker}] ❌ Error fetching expirations: {e}")
                 return
 
             for expiration in filtered_expirations:
-                windows = build_date_windows(expiration, start_date_bound=start_date, end_date_bound=end_date)
+                windows = build_date_windows(expiration, date_bound=date, end_date_bound=end_date)
                 for window_start, window_end in windows:
                     params = {
-                        'root': ticker,
+                        'symbol': ticker,
                         'exp': expiration,
-                        'start_date': window_start,
+                        'date': window_start,
                         'end_date': window_end,
                         'ivl': interval,
                         'pretty_time': False,
@@ -150,7 +324,7 @@ class DataCollector():
                         for item in data.get("response", []):
                             contract_info = item["contract"]
                             contract_meta = {
-                                'root': contract_info["root"],
+                                'symbol': contract_info["symbol"],
                                 'expiration': int(contract_info["expiration"]),
                                 'strike': int(contract_info["strike"]),
                                 'right': contract_info["right"]
@@ -187,64 +361,7 @@ class DataCollector():
                     except Exception as e:
                         logger.exception(f"[{ticker} {expiration}] ❌ Error for window {window_start}–{window_end}: {e}")
 
-        runmain(ticker, start_date, end_date, interval)
-
-    def get_options_chains(self,ticker):
-
-        self.db.archive_options(ticker)
-        expiry_list = self.collect_expiration_dates(ticker)
-        if expiry_list == None:
-            logger.error(f"API returned no contracts for {ticker}")
-            return None
-        l = []
-        current_time = datetime.datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d %H:%M:%S")
-
-        for expiration in expiry_list:
-            chains = requests.get(
-                config.OPTIONS_URL,
-                params={'symbol': ticker, 'expiration': expiration, 'greeks': 'true'},
-                headers=self.config.HEADERS
-            )
-            
-            if chains.status_code == 200:
-                chain_json = chains.json()  # Attempt to parse JSON
-                if chain_json == None:
-                    self.logger.info(f"Failed to call option data for {ticker}")
-                options = chain_json['options']['option']
-
-                for option in options:
-                    
-                    def get_greek(option, key):
-                        try:
-                            return option["greeks"][key]
-                        except (KeyError, TypeError):
-                            return None
-
-                    option_tuple = (
-                    option.get("underlying", None),
-                    option.get("symbol", None),
-                    option.get("description", None),
-                    option.get("strike", None),
-                    option.get("bid", None),
-                    option.get("ask", None),
-                    option.get("volume", None),
-                    option.get("option_type", None),
-                    option.get("expiration_date", None),  
-                    option.get("last_volume", None),
-                    get_greek(option, "delta"),
-                    get_greek(option, "gamma"),
-                    get_greek(option, "theta"),
-                    get_greek(option, "vega"),
-                    get_greek(option, "rho"),
-                    get_greek(option, "mid_iv"),
-                    current_time  
-                )
-
-                    l.append(option_tuple)
-            else:
-                self.logger.info(f"Failed to call option data for {ticker}")
-
-        self.db.insert_option_data(l)
+        runmain(ticker, date, end_date, interval)
 
     def timestamp_to_datetime(self, timestamp):
         etz = pytz.timezone('US/Eastern')
@@ -255,13 +372,13 @@ class DataCollector():
     def get_stocks_minute(self, ticker, for_the_past_x_days = 356):
 
         end_date = date.today()
-        start_date = end_date - (timedelta(for_the_past_x_days))
-        url = f'https://api.marketdata.app/v1/stocks/candles/minutely/{ticker}/?from={start_date}&to={end_date}'
+        date = end_date - (timedelta(for_the_past_x_days))
+        url = f'https://api.marketdata.app/v1/stocks/candles/minutely/{ticker}/?from={date}&to={end_date}'
 
         ticker_list = []
         response = requests.get(
             url, 
-            headers=self.config.MD_HEADER
+            headers=self.MD_HEADER
         )
 
         if response.status_code in (200, 203):
@@ -284,17 +401,17 @@ class DataCollector():
             ticker_list.append(data_tuple)
 
         logger.info(f"Collected {ticker} minute prices for the past {for_the_past_x_days} days for a total of {len(data['t'])}")
-        self.db.insert_stock_candles(ticker_list)
+        return ticker_list
         
     def get_stocks_daily(self, ticker):
         end_date = date.today()
-        start_date = end_date - (timedelta(365)*10)
-        params = {'symbol': ticker, 'interval': 'daily', 'start': start_date, 'end': end_date, 'session_filter': 'all'}
+        date = end_date - (timedelta(365)*10)
+        params = {'symbol': ticker, 'interval': 'daily', 'start': date, 'end': end_date, 'session_filter': 'all'}
         response = requests.get(
-            self.config.HISTORY_URL,
-            params=  params,
-            headers=self.config.HEADERS
-            )
+            HISTORY_URL,
+            params=params,
+            headers=self.MD_HEADER
+        )
 
         if response. status_code in (200, 203):
             data = response.json()
@@ -320,44 +437,15 @@ class DataCollector():
         logger.info(f"Collected {ticker} daily prices for a total of {len(data_tuples)} entries")
         self.db.insert_stock_candles(data_tuples)
 
-    def update_stocks_quote(self, ticker):
-
-        end_date = date.today()
-        start_date = end_date - (timedelta(1))
-
-        url = f'https://api.marketdata.app/v1/stocks/quotes/{ticker}/'
-
-        response = requests.get(url, headers=self.config.MD_HEADER)
-        current_time = datetime.datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d %H:%M:%S")
-
-        if response.status_code in (200, 203):
-            data = response.json()
-        else:
-           self.logger.error(f'Failed to retrieve data for url: {url}')
-
-        data_tuple = (
-        ticker, 
-        data['ask'][0],
-        data['askSize'][0],
-        data['bid'][0],
-        data['bidSize'][0],
-        data['mid'][0],
-        data['last'][0],
-        data['volume'][0],
-        current_time
-        )
-        
-        self.logger.info(f"Collected {ticker} quotes succesfully")
-        self.db.insert_stocks_realtime(data_tuple)
 
     def theta_bulk_options(self, params=None):
         """
         Collect historical minute data from ThetaData server. Needed Paramaters include
         
         exp: integer in format YYYYMMDD
-        start_date: integer 
+        date: integer 
         end_date: integer
-        root: string
+        symbol: string
         ivl: integer (in milliseconds)
         """
         selector_list = [
@@ -367,13 +455,13 @@ class DataCollector():
             print(f'selector must be set to either ({selector_list})')
             
 
-        BASE_URL = 'http://127.0.0.1:25510/v2'
+        BASE_URL = 'http://127.0.0.1:25503/v3'
         
         paramaters = {'exp': params['exp'], 
-                  'start_date': params['start_date'],
+                  'date': params['date'],
                   'end_date': params['end_date'],
                   'use_csv': 'false',
-                  'root': params['root'],
+                  'symbol': params['symbol'],
                   'ivl':   params['ivl'] 
         }
         
@@ -396,94 +484,234 @@ class DataCollector():
                 url = None
         return data
 
-    def theta_bulk_greeks(self, params=None):
-        return
 
-    def theta_stocks_quote(self, 
-                        ticker: str,
-                        start_date: str,
-                        end_date: str,
-                        ivl: int = 0,
-                        use_csv: bool = True,
-                        pretty_time: bool = False,
-                        rth: bool = True,
-                        start_time: str = None,
-                        end_time: str = None,
-                        venue: str = "nqb") -> list[dict]:
+    def theta_stocks_quote(
+            self,
+            ticker: str,
+            date: str,
+            end_date: str = None,
+            interval: str = "1s",
+            start_time: str = "09:30:00",
+            end_time: str = "16:00:00",
+            venue: str = "nqb",
+            format: str = "csv",
+            return_tuples: bool = False,
+            base_url: str = "http://localhost:25503/v3"
+        ) -> list:
         """
-        Fetches NBBO quote data for a given ticker using the Theta Terminal API.
+        Fetches stock quote data for a given ticker using the Theta Terminal v3 API.
+        Returns NBBO quotes as tuples (timestamp, ticker_id, bid, bid_size, bid_exchange, bid_condition, ask, ask_size, ask_exchange, ask_condition).
 
         Parameters:
-        - ticker (str): The stock symbol (e.g., 'AAPL').
-        - start_date (str): Start date in YYYYMMDD format (e.g., '20240401').
-        - end_date (str): End date in YYYYMMDD format.
-        - ivl (int): Interval in milliseconds (e.g., 60000 for 1-minute). Use 0 for tick-level data.
-        - use_csv (bool): If True, use CSV format. If False, use JSON (legacy).
-        - pretty_time (bool): If True, returns human-readable timestamps (overrides ms).
-        - rth (bool): If True, limits to regular trading hours (09:30–16:00 ET).
-        - start_time (str): Milliseconds since midnight to start (optional, e.g., '34200000').
-        - end_time (str): Milliseconds since midnight to end (optional).
-        - venue (str): Market feed ('nqb' = Nasdaq Basic, 'utp_cta' = consolidated).
+            ticker (str): The stock symbol (e.g., 'AAPL').
+            date (str): Date in YYYYMMDD format (e.g., '20240102'). Required.
+            end_date (str): End date in YYYYMMDD format (optional). If None, only fetches single date.
+            interval (str): Time interval - one of: tick, 10ms, 100ms, 500ms, 1s, 5s, 10s, 15s, 30s, 1m, 5m, 10m, 15m, 30m, 1h. Default: "1m"
+            start_time (str): Start time in format "HH:MM:SS" (default: "09:30:00").
+            end_time (str): End time in format "HH:MM:SS" (default: "16:00:00").
+            venue (str): Market feed ('nqb' = Nasdaq Basic, 'utp_cta' = merged UTP & CTA). Default: "nqb"
+            format (str): Response format - 'csv', 'json', 'ndjson', or 'html'. Default: "csv"
+            return_tuples (bool): (Ignored, always returns tuples).
+            base_url (str): Base URL for Theta Terminal API. Default: "http://localhost:25503/v3"
 
         Returns:
-        - List of dictionaries with quote data. Each dictionary includes:
-        ['symbol', 'timestamp', 'bid_size', 'bid_exchange', 'bid', 'bid_condition',
-        'ask_size', 'ask_exchange', 'ask', 'ask_condition', 'date']
+            List of tuples: (timestamp, ticker_id, bid, bid_size, bid_exchange, bid_condition, ask, ask_size, ask_exchange, ask_condition)
         """
+        from datetime import datetime, timedelta
+        import httpx
+        import csv
+        import io
+        import requests
 
-        base_url = "http://127.0.0.1:25510/v2/hist/stock/quote"
+        url = f"{base_url}/stock/history/quote"
 
         params = {
-            "root": ticker,
-            "start_date": start_date,
-            "end_date": end_date,
-            "ivl": ivl,
-            "use_csv": use_csv,
-            "pretty_time": pretty_time,
-            "rth": rth,
-            "venue": venue
+            "symbol": ticker,
+            "date": date,
+            "interval": interval,
+            "start_time": start_time,
+            "end_time": end_time,
+            "venue": venue,
+            "format": format
         }
 
-        if start_time:
-            params["start_time"] = start_time
-        if end_time:
-            params["end_time"] = end_time
+        # Prepare list of dates to fetch
+        dates_to_fetch = [date]
+        if end_date and end_date != date:
+            start_dt = datetime.strptime(date, "%Y%m%d")
+            end_dt = datetime.strptime(end_date, "%Y%m%d")
+            dates_to_fetch = []
+            current_dt = start_dt
+            while current_dt <= end_dt:
+                dates_to_fetch.append(current_dt.strftime("%Y%m%d"))
+                current_dt += timedelta(days=1)
 
-        try:
-            response = requests.get(base_url, params=params, timeout=15)
-            response.raise_for_status()
-        except Exception as e:
-            self.logger.error(f"❌ Failed to fetch NBBO quote for {ticker}: {e}")
-            return []
+        ticker_id = self.db.get_or_create_root(ticker)
+        all_results = []
 
-        rows = response.text.strip().split("\n")
-        if not rows:
-            self.logger.warning(f"⚠ No data returned for {ticker}")
-            return []
+        for fetch_date in dates_to_fetch:
+            params["date"] = fetch_date
 
-        records = []
-        for row in rows:
-            fields = row.split(",")
-            if len(fields) != 10:
-                continue
-            ms_of_day, bid_size, bid_ex, bid, bid_cond, ask_size, ask_ex, ask, ask_cond, date_str = fields
             try:
-                timestamp = datetime.strptime(date_str, "%Y%m%d") + timedelta(milliseconds=int(ms_of_day))
-                record = {
-                    "symbol": ticker,
-                    "timestamp": timestamp,
-                    "bid_size": int(bid_size),
-                    "bid_exchange": int(bid_ex),
-                    "bid": float(bid),
-                    "bid_condition": int(bid_cond),
-                    "ask_size": int(ask_size),
-                    "ask_exchange": int(ask_ex),
-                    "ask": float(ask),
-                    "ask_condition": int(ask_cond),
-                    "date": int(date_str)
-                }
-                records.append(record)
-            except Exception as e:
-                self.logger.warning(f"⚠ Could not parse row: {row} -> {e}")
+                if format == "csv":
+                    with httpx.stream("GET", url, params=params, timeout=60) as response:
+                        response.raise_for_status()
+                        first_line = True
 
-        return records
+                        for line in response.iter_lines():
+                            line = line.decode() if hasattr(line, "decode") else line
+                            if not line.strip():
+                                continue
+
+                            # Skip header row
+                            if first_line:
+                                first_line = False
+                                if 'timestamp' in line.lower() or line.strip().startswith('timestamp'):
+                                    continue
+
+                            try:
+                                row = next(csv.reader(io.StringIO(line)))
+                                if len(row) < 9:
+                                    continue
+
+                                timestamp_str = row[0].strip()
+                                if timestamp_str.lower() == 'timestamp' or not timestamp_str[0].isdigit():
+                                    continue
+
+                                # Parse timestamp with full time (to get ms_of_day)
+                                try:
+                                    # Try most common ISO formats first
+                                    if 'T' in timestamp_str:
+                                        if '+' in timestamp_str or timestamp_str.endswith('Z'):
+                                            # ISO8601 with timezone
+                                            timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                                        else:
+                                            try:
+                                                timestamp = datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%S.%f")
+                                            except ValueError:
+                                                try:
+                                                    timestamp = datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%S")
+                                                except ValueError:
+                                                    timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+                                    else:
+                                        # Try fallback: YYYYMMDD[ HH:MM:SS(.sss)]
+                                        try:
+                                            timestamp = datetime.strptime(timestamp_str, "%Y%m%d %H:%M:%S.%f")
+                                        except ValueError:
+                                            try:
+                                                timestamp = datetime.strptime(timestamp_str, "%Y%m%d %H:%M:%S")
+                                            except ValueError:
+                                                timestamp = datetime.strptime(timestamp_str, "%Y%m%d")
+                                except ValueError as ve:
+                                    self.logger.warning(f"Could not parse timestamp '{timestamp_str}': {ve}")
+                                    continue
+
+                                # Get ms_of_day
+                                ms_of_day = (timestamp.hour * 3600 + timestamp.minute * 60 + timestamp.second) * 1000 + getattr(timestamp, "microsecond", 0) // 1000
+
+                                # Parse other fields per schema
+                                bid_size = int(row[1])
+                                bid_exchange = int(row[2])
+                                bid = float(row[3])
+                                bid_condition = int(row[4])
+                                ask_size = int(row[5])
+                                ask_exchange = int(row[6])
+                                ask = float(row[7])
+                                ask_condition = int(row[8])
+
+                                # Required tuple: (timestamp, ticker_id, bid, bid_size, bid_exchange, bid_condition, ask, ask_size, ask_exchange, ask_condition)
+                                quote_tuple = (
+                                    timestamp,
+                                    ticker_id,
+                                    bid,
+                                    bid_size,
+                                    bid_exchange,
+                                    bid_condition,
+                                    ask,
+                                    ask_size,
+                                    ask_exchange,
+                                    ask_condition
+                                )
+                                all_results.append(quote_tuple)
+                            except (ValueError, IndexError) as e:
+                                self.logger.warning(f"Could not parse row: {line[:100]} -> {e}")
+                                continue
+                else:
+                    # Use requests for non-CSV formats (not commonly used, fallback logic)
+                    response = requests.get(url, params=params, timeout=60)
+                    response.raise_for_status()
+                    if format == "json":
+                        data = response.json()
+                        self.logger.warning("JSON format parsing not yet implemented for theta_stocks_quote.")
+                    else:
+                        rows = response.text.strip().split("\n")
+                        for row in rows:
+                            if not row.strip():
+                                continue
+                            # Placeholder for other formats
+
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 472:
+                    self.logger.info(f"No data available for {ticker} on {fetch_date} (HTTP 472)")
+                else:
+                    self.logger.error(f"HTTP error fetching data for {ticker} on {fetch_date}: {e}")
+                continue
+            except Exception as e:
+                self.logger.error(f"Unexpected error fetching data for {ticker} on {fetch_date}: {e}")
+                continue
+
+        if all_results:
+            self.logger.info(f"Collected {len(all_results)} stock quote records for {ticker}.")
+        else:
+            self.logger.warning(f"No valid stock quote records were parsed for {ticker}.")
+
+        return all_results
+        return all_results
+
+
+if __name__ == "__main__":
+
+    db = DatabaseConnection.DatabaseConnection()
+    data_collector = DataCollector(db)
+
+    # Quick tests for the new function theta_options_quotes
+
+    # Test 1: Basic usage with required parameters
+    results = data_collector.theta_options_quotes(
+        symbol="AAPL",
+        date="20240105"
+    )
+    print(f"Test 1 - Results count for AAPL 20240105: {len(results)}")
+
+    # Test 2: Range of dates
+    results = data_collector.theta_options_quotes(
+        symbol="MSFT",
+        date="20240103",
+        end_date="20240105"
+    )
+    print(f"Test 2 - Results count for MSFT 20240103-20240105: {len(results)}")
+
+    # Test 3: With specific expiration and strike
+    results = data_collector.theta_options_quotes(
+        symbol="SPY",
+        date="20240102",
+        expiration="20240119",
+        strike="450",
+        right="call"
+    )
+    print(f"Test 3 - Results count for SPY 20240102 expiration 20240119 strike 450 call: {len(results)}")
+
+    # Test 4: Nonexistent symbol (should handle gracefully)
+    results = data_collector.theta_options_quotes(
+        symbol="FAKE123",
+        date="20240102"
+    )
+    print(f"Test 4 - Results count for FAKE123: {results}")
+
+    # Test 5: Bad date format (should handle error and return empty or None)
+    results = data_collector.theta_options_quotes(
+        symbol="AAPL",
+        date="bad-date"
+    )
+    print(f"Test 5 - Results for bad date input: {results}")
+

@@ -1,0 +1,172 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingest-historical-stock
+  namespace: charts
+  labels:
+    app: ingest-historical-stock
+    component: data-ingestion
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # Recreate strategy for single-instance jobs
+  selector:
+    matchLabels:
+      app: ingest-historical-stock
+  template:
+    metadata:
+      labels:
+        app: ingest-historical-stock
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      # Security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      containers:
+      - name: ingest-historical-stock
+        image: thales884/ingest-historical-stock:1.0.3 # Update with your registry
+        imagePullPolicy: Always
+
+        # Environment variables
+        env:
+        # Theta Terminal API Configuration
+        - name: BASE_URL  # Theta Terminal API base URL
+          valueFrom:
+            secretKeyRef:
+              name: environment-variables
+              key: base-url
+        # Data Processing Configuration
+        - name: LOOKBACK
+          value: "1d"  # Default lookback period (1m to 700d). Formats: 1m, 30m, 1h, 1d, 7d, 700d
+        - name: SCHEDULE
+          value: "1d"  # Schedule interval (1m to 7d). For 1d, runs at SCHEDULE_TIME
+        - name: SCHEDULE_TIME
+          value: "16:15"  # Daily schedule time (HH:MM format). Used when schedule=1d (default: 4:15 PM)
+        - name: REPAIR
+          value: "true"  # If false, only checks DB, doesn't fetch from API. If true, fetches missing data
+        # Ticker Source Configuration
+        - name: TICKER_SOURCE
+          value: "db"  # Options: db (public.alpha_list table), env (TICKER_LIST), config_file
+        - name: TICKER_LIST
+          value: "SPY,QQQ,AAPL"  # Fallback ticker list (used if TICKER_SOURCE=env or db query fails)
+        # Service Configuration
+        - name: RUN_MODE
+          value: "service"  # Service mode (long-running with API)
+        - name: API_PORT
+          value: "8080"  # API server port
+        - name: PARALLEL_WORKERS
+          value: "2"  # Number of parallel workers for API calls
+        - name: SCHEDULE_ENABLED
+          value: "true"  # Enable scheduled runs
+        # Legacy Support (for backward compatibility)
+        - name: DAYS_BACK
+          value: "365"  # Legacy: Number of days to look back (converted to LOOKBACK if LOOKBACK not set)
+        # Production Configuration
+        - name: USE_PRODUCTION_SERVER
+          value: "true"  # Use Waitress production WSGI server (not Flask dev server)
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: environment-variables
+              key: db-name
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: environment-variables
+              key: db-user
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: environment-variables
+              key: db-password
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: environment-variables
+              key: db-host
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: environment-variables
+              key: db-port
+        - name: LOG_LEVEL
+          value: "INFO"
+
+        # Resource limits
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+
+        # Ports
+        ports:
+        - name: http-api
+          containerPort: 8080
+          protocol: TCP
+
+        # Health check - HTTP endpoint
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 2
+
+        # Volume for logs and healthcheck
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+        - name: healthcheck
+          mountPath: /tmp
+
+      volumes:
+      - name: logs
+        emptyDir: {}
+      - name: healthcheck
+        emptyDir: {}
+
+      # Restart policy
+      restartPolicy: Always
+
+      # Node selector (optional - if you want to run on specific nodes)
+      # nodeSelector:
+      #   node-type: data-processing
+
+---
+# Service for API access
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingest-historical-stock-api
+  namespace: charts
+  labels:
+    app: ingest-historical-stock
+spec:
+  type: NodePort
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http-api
+  selector:
+    app: ingest-historical-stock
+

@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingest-live-stock
+  namespace: charts
+  labels:
+    app: ingest-live-stock
+    component: data-ingestion
+spec:
+  replicas: 1  # Only one instance needed for websocket connection
+  strategy:
+    type: Recreate  # Recreate strategy since we can't have multiple websocket connections
+  selector:
+    matchLabels:
+      app: ingest-live-stock
+  template:
+    metadata:
+      labels:
+        app: ingest-live-stock
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      # Security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      
+      containers:
+      - name: ingest-live-stock
+        image: thales884/ingest-live-stock:1.0.1  # Update with your registry
+        imagePullPolicy: Always
+        
+        # Environment variables
+        env:
+        - name: WEBSOCKET_URL
+          value: "ws://192.168.1.138:25520/v1/events"  # Update with your Theta Terminal service
+        - name: SYMBOL
+          value: "SPY"
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: environment-variables
+              key: db-name
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: environment-variables
+              key: db-user
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: environment-variables
+              key: db-password
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: environment-variables
+              key: db-host
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: environment-variables
+              key: db-port
+        
+        # Resource limits
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        
+        # Health check - simple file-based check
+        # Check if file exists and was modified within last 5 minutes (300 seconds)
+        livenessProbe:
+          exec:
+            command:
+            - python3
+            - -c
+            - "import os, time; f='/tmp/healthcheck'; exit(0 if os.path.exists(f) and (time.time() - os.path.getmtime(f)) < 300 else 1)"
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        
+        readinessProbe:
+          exec:
+            command:
+            - python3
+            - -c
+            - "import os, time; f='/tmp/healthcheck'; exit(0 if os.path.exists(f) and (time.time() - os.path.getmtime(f)) < 300 else 1)"
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        # Volume for logs and healthcheck
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+        - name: healthcheck
+          mountPath: /tmp
+        
+      volumes:
+      - name: logs
+        emptyDir: {}
+      - name: healthcheck
+        emptyDir: {}
+      
+      # Restart policy
+      restartPolicy: Always
+      
+      # Node selector (optional - if you want to run on specific nodes)
+      # nodeSelector:
+      #   node-type: data-processing
+

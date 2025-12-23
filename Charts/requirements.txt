@@ -1,5 +1,28 @@
-httpx
-psycopg2-binary
-pytz
-requests>=2.0
-dotenv
+# Requirements for Optimized Orpheus Charts
+# High-performance TimescaleDB interface
+
+# Core database drivers
+psycopg2-binary>=2.9.0
+
+# Data processing (if not already installed)
+pandas>=1.5.0
+numpy>=1.21.0
+
+# Interactive Brokers integration
+ib-insync>=0.9.86
+
+# Webhook support
+requests>=2.28.0
+python-dotenv>=0.19.0
+httpx>=0.24.0
+
+# Scheduling
+schedule>=1.2.0
+
+# HTTP API
+flask>=2.3.0
+waitress>=2.1.0  # Production WSGI server
+
+# Optional: For enhanced performance
+# asyncpg>=0.28.0  # Async support
+# sqlalchemy>=1.4.0  # Advanced ORM features
