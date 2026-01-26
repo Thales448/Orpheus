@@ -20,6 +20,13 @@ import pytz
 import time
 from dotenv import load_dotenv
 
+# Redis support
+try:
+    import redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -120,14 +127,23 @@ class MarketHoursChecker:
 class LiveStockIngestService:
     """Service to stream live stock trades and insert quotes directly into database"""
     
-    def __init__(self, websocket_url: Optional[str] = None, symbol: Optional[str] = None, test_mode: bool = False):
-        # Get websocket URL from environment variable if not provided
-        self.websocket_url = websocket_url or os.getenv('WEBSOCKET_URL', 'ws://127.0.0.1:25520/v1/events')
+    def __init__(self, websocket_url: Optional[str] = None, symbol: Optional[str] = None, test_mode: bool = False, dev_mode: bool = False):
+        # Dev mode: local websocket, no database inserts (for Redis stream testing)
+        self.dev_mode = dev_mode
+        if self.dev_mode:
+            # Override websocket URL for dev mode
+            self.websocket_url = 'ws://localhost:8765/v1/events'
+            # Dev mode also disables database inserts
+            self.test_mode = True
+            logger.warning("DEV MODE ENABLED - Using local websocket, database inserts DISABLED, market hours check DISABLED (Redis streaming still enabled)")
+        else:
+            # Get websocket URL from environment variable if not provided
+            self.websocket_url = websocket_url or os.getenv('WEBSOCKET_URL', 'ws://127.0.0.1:25520/v1/events')
+            self.test_mode = test_mode  # If True, don't insert to database, just log
         self.symbol = symbol  # Deprecated - now using watchlist
-        self.test_mode = test_mode  # If True, don't insert to database, just log
         
         # Initialize database connection with error handling
-        if not test_mode:
+        if not self.test_mode:
             try:
                 self.db = DatabaseConnection()
                 logger.info("Database connection established")
@@ -176,8 +192,59 @@ class LiveStockIngestService:
         # Health check file for Kubernetes
         self.healthcheck_file = '/tmp/healthcheck'
         
-        if test_mode:
-            logger.warning("TEST MODE ENABLED - Database inserts are DISABLED")
+        # Initialize Redis connection if configured
+        self.redis_client = None
+        self.redis_enabled = False
+        self.redis_stream_name = 'webstream'  # Default stream name
+        
+        if REDIS_AVAILABLE:
+            redis_url = os.getenv('REDIS_URL')
+            redis_password = os.getenv('REDIS_PASSWORD', '')
+            
+            if redis_url:
+                try:
+                    # Build Redis URL with password if provided
+                    if redis_password:
+                        # Parse the URL and add password
+                        if '://' in redis_url:
+                            protocol, rest = redis_url.split('://', 1)
+                            if '@' in rest:
+                                # Password already in URL
+                                redis_connection_url = redis_url
+                            else:
+                                # Add password to URL
+                                redis_connection_url = f"{protocol}://:{redis_password}@{rest}"
+                        else:
+                            redis_connection_url = f"redis://:{redis_password}@{redis_url}"
+                    else:
+                        redis_connection_url = redis_url
+                    
+                    self.redis_client = redis.from_url(
+                        redis_connection_url,
+                        decode_responses=True,
+                        socket_connect_timeout=5,
+                        socket_timeout=5
+                    )
+                    # Test connection
+                    self.redis_client.ping()
+                    self.redis_enabled = True
+                    logger.info(f"Redis enabled with URL: {redis_url}" + (" with password authentication" if redis_password else ""))
+                except Exception as e:
+                    logger.warning(f"Failed to connect to Redis: {e}. Continuing without Redis streaming.")
+                    self.redis_client = None
+                    self.redis_enabled = False
+            else:
+                logger.debug("Redis not configured (REDIS_URL not set)")
+        else:
+            if os.getenv('REDIS_URL'):
+                logger.warning("Redis URL provided but redis package not available. Install with: pip install redis")
+        
+        # Redis statistics
+        self.stats['redis_quotes_streamed'] = 0
+        self.stats['redis_errors'] = 0
+        
+        if self.test_mode and not self.dev_mode:
+            logger.warning("TEST MODE ENABLED - Database inserts are DISABLED (Redis streaming still enabled)")
     
     def load_watchlist(self) -> List[str]:
         """Load all tickers from public.alpha_list watchlist"""
@@ -284,9 +351,11 @@ class LiveStockIngestService:
                     contract_data = data.get('contract', {})
                     
                     # Verify it's for one of our watchlist symbols (case-insensitive)
+                    # In dev mode, accept all symbols (simulation mode)
                     root = contract_data.get('root', '').upper()
                     # If symbols not loaded yet, accept all (will be filtered later)
-                    if self.symbols and root not in self.symbols:
+                    # In dev mode, always accept all symbols
+                    if not self.dev_mode and self.symbols and root not in self.symbols:
                         if not hasattr(self, '_last_wrong_symbol') or self._message_count % 100 == 0:
                             logger.debug(f"Ignoring trade for symbol '{root}' (not in watchlist)")
                             self._last_wrong_symbol = True
@@ -448,8 +517,9 @@ class LiveStockIngestService:
             return
         
         if self.test_mode:
-            logger.info(f"TEST MODE: Would insert {len(quotes)} quotes to database")
-            logger.info(f"TEST MODE: Sample quote: {quotes[0] if quotes else 'N/A'}")
+            mode_label = "DEV MODE" if self.dev_mode else "TEST MODE"
+            logger.info(f"{mode_label}: Would insert {len(quotes)} quotes to database")
+            logger.info(f"{mode_label}: Sample quote: {quotes[0] if quotes else 'N/A'}")
             return
         
         try:
@@ -484,6 +554,11 @@ class LiveStockIngestService:
         The ID is returned in a confirmation message to verify the request was successful.
         Failure to increment will prevent automatic resubscription.
         """
+        # Skip subscriptions in dev mode - websocket is a simple simulation that just sends data
+        if self.dev_mode:
+            logger.info("DEV MODE: Skipping subscriptions - websocket will send data directly")
+            return
+        
         if not self.symbols:
             logger.error("No symbols in watchlist to subscribe to")
             return
@@ -561,20 +636,27 @@ class LiveStockIngestService:
                     f"ms={trade.get('ms_of_day')}"
                 )
                 
-                # Prepare quote for insertion
+                # Stream to Redis immediately (non-blocking) - works in test mode too
+                self.stream_quote_to_redis(trade)
+                
+                # Prepare quote for insertion (only needed for database, not Redis)
                 quote = self.prepare_quote_for_insert(trade)
                 
                 if quote:
-                    # Add to buffer
-                    self.quote_buffer.append(quote)
-                    self.stats['total_quotes_buffered'] += 1
-                    logger.debug(f"Quote added to buffer (buffer size: {len(self.quote_buffer)}/{self.buffer_size})")
-                    
-                    # Flush if buffer is full or enough time has passed (every 1 second)
-                    now = datetime.now()
-                    if (len(self.quote_buffer) >= self.buffer_size or 
-                        (now - self.last_insert_time).total_seconds() >= 1):
-                        self.flush_buffer()
+                    # Add to buffer (only if not in test mode, or if we want to track stats)
+                    if not self.test_mode:
+                        self.quote_buffer.append(quote)
+                        self.stats['total_quotes_buffered'] += 1
+                        logger.debug(f"Quote added to buffer (buffer size: {len(self.quote_buffer)}/{self.buffer_size})")
+                        
+                        # Flush if buffer is full or enough time has passed (every 1 second)
+                        now = datetime.now()
+                        if (len(self.quote_buffer) >= self.buffer_size or 
+                            (now - self.last_insert_time).total_seconds() >= 1):
+                            self.flush_buffer()
+                    else:
+                        # In test mode, still track that we would have buffered it
+                        self.stats['total_quotes_buffered'] += 1
                     
                     # Log aggregated stats every 3 seconds (independent of flush)
                     self.log_aggregated_stats()
@@ -596,6 +678,84 @@ class LiveStockIngestService:
         except Exception as e:
             logger.error(f"Error handling message: {e}", exc_info=True)
             self.stats['total_errors'] += 1
+    
+    def stream_quote_to_redis(self, trade: Dict):
+        """Stream a trade quote to Redis stream"""
+        if not self.redis_enabled or not self.redis_client:
+            return
+        
+        try:
+            # Check if connection is alive, reconnect if needed
+            try:
+                self.redis_client.ping()
+            except:
+                logger.warning("Redis connection lost, attempting to reconnect...")
+                if not self._reconnect_redis():
+                    return
+            
+            # Prepare data for Redis stream
+            # Include all relevant trade information
+            stream_data = {
+                'symbol': trade.get('symbol', ''),
+                'price': str(trade.get('price', '')),
+                'size': str(trade.get('size', '')),
+                'exchange': str(trade.get('exchange', '')),
+                'condition': str(trade.get('condition', '')),
+                'date': str(trade.get('date', '')),
+                'ms_of_day': str(trade.get('ms_of_day', '')),
+                'sequence': str(trade.get('sequence', '')),
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # Add to Redis stream
+            self.redis_client.xadd(self.redis_stream_name, stream_data)
+            self.stats['redis_quotes_streamed'] += 1
+            
+        except Exception as e:
+            self.stats['redis_errors'] += 1
+            # Don't log every error to avoid spam, but log occasionally
+            if self.stats['redis_errors'] % 100 == 1:
+                logger.warning(f"Error streaming quote to Redis (error count: {self.stats['redis_errors']}): {e}")
+    
+    def _reconnect_redis(self) -> bool:
+        """Attempt to reconnect to Redis"""
+        if not REDIS_AVAILABLE:
+            return False
+        
+        redis_url = os.getenv('REDIS_URL')
+        redis_password = os.getenv('REDIS_PASSWORD', '')
+        
+        if not redis_url:
+            return False
+        
+        try:
+            # Build Redis URL with password if provided
+            if redis_password:
+                if '://' in redis_url:
+                    protocol, rest = redis_url.split('://', 1)
+                    if '@' in rest:
+                        redis_connection_url = redis_url
+                    else:
+                        redis_connection_url = f"{protocol}://:{redis_password}@{rest}"
+                else:
+                    redis_connection_url = f"redis://:{redis_password}@{redis_url}"
+            else:
+                redis_connection_url = redis_url
+            
+            self.redis_client = redis.from_url(
+                redis_connection_url,
+                decode_responses=True,
+                socket_connect_timeout=5,
+                socket_timeout=5
+            )
+            self.redis_client.ping()
+            self.redis_enabled = True
+            logger.info("Redis reconnection successful")
+            return True
+        except Exception as e:
+            logger.warning(f"Redis reconnection failed: {e}")
+            self.redis_enabled = False
+            return False
     
     def calculate_retry_delay(self) -> float:
         """Calculate exponential backoff retry delay"""
@@ -633,8 +793,8 @@ class LiveStockIngestService:
         )[:5]  # Top 5 by quote count
         price_str = ", ".join([f"{sym}=${price:.2f}" for sym, price in top_symbols])
         
-        # Log aggregated summary
-        logger.info(
+        # Build stats message
+        stats_msg = (
             f"STATS prices=[{price_str}] "
             f"quotes={self.stats['quotes_per_second']:.1f}/sec "
             f"messages={self.stats['messages_per_second']:.1f}/sec "
@@ -643,9 +803,21 @@ class LiveStockIngestService:
             f"inserted={self.stats['total_quotes_inserted']} "
             f"errors={self.stats['total_errors']} "
             f"flushes={self.stats['buffer_flush_count']} "
+        )
+        
+        # Add Redis stats if enabled
+        if self.redis_enabled:
+            stats_msg += (
+                f"redis_streamed={self.stats['redis_quotes_streamed']} "
+                f"redis_errors={self.stats['redis_errors']} "
+            )
+        
+        stats_msg += (
             f"symbols={len(self.symbols)} "
             f"period={time_since_last:.1f}s"
         )
+        
+        logger.info(stats_msg)
         
         # Reset timer
         self.stats['last_summary_time'] = now
@@ -699,8 +871,8 @@ class LiveStockIngestService:
         
         while self.running:
             try:
-                # Check if market is open
-                if not self.market_checker.is_market_open():
+                # Check if market is open (skip in dev mode for simulation)
+                if not self.dev_mode and not self.market_checker.is_market_open():
                     await self.wait_for_market_open()
                     if not self.running:
                         break
@@ -749,31 +921,35 @@ class LiveStockIngestService:
                     # Start healthcheck updater task
                     healthcheck_task = asyncio.create_task(self.healthcheck_updater())
                     
-                    # Wait a moment for subscription confirmation
-                    await asyncio.sleep(1)
-                    
-                    # Check if we got confirmation
-                    if self.pending_subscriptions:
-                        pending_ids = list(self.pending_subscriptions.keys())
-                        logger.warning(f"Still waiting for subscription confirmation (IDs: {pending_ids})")
-                        # Wait a bit more
-                        await asyncio.sleep(2)
+                    # Wait for subscription confirmation (skip in dev mode)
+                    if not self.dev_mode:
+                        # Wait a moment for subscription confirmation
+                        await asyncio.sleep(1)
+                        
+                        # Check if we got confirmation
                         if self.pending_subscriptions:
-                            logger.warning(f"Subscription confirmation timeout. Proceeding anyway")
+                            pending_ids = list(self.pending_subscriptions.keys())
+                            logger.warning(f"Still waiting for subscription confirmation (IDs: {pending_ids})")
+                            # Wait a bit more
+                            await asyncio.sleep(2)
+                            if self.pending_subscriptions:
+                                logger.warning(f"Subscription confirmation timeout. Proceeding anyway")
                     
                     try:
                         # Main message loop
                         logger.info("Starting message loop, waiting for quotes")
-                        if self.confirmed_subscriptions:
+                        if not self.dev_mode and self.confirmed_subscriptions:
                             confirmed_symbols = list(self.confirmed_subscriptions.values())
                             logger.info(f"Active subscriptions: {len(self.confirmed_subscriptions)} symbols - {', '.join(confirmed_symbols[:10])}{'...' if len(confirmed_symbols) > 10 else ''}")
+                        elif self.dev_mode:
+                            logger.info("DEV MODE: Ready to receive simulated quotes from websocket")
                         
                         async for message in websocket:
                             if not self.running:
                                 break
                             
-                            # Check if market closed during streaming
-                            if not self.market_checker.is_market_open():
+                            # Check if market closed during streaming (skip in dev mode for simulation)
+                            if not self.dev_mode and not self.market_checker.is_market_open():
                                 logger.info("Market closed. Disconnecting")
                                 break
                             
@@ -850,20 +1026,37 @@ class LiveStockIngestService:
             self.running = False
             if self.db and not self.test_mode:
                 self.db.close()
+            # Close Redis connection if enabled
+            if self.redis_client:
+                try:
+                    self.redis_client.close()
+                    logger.info("Redis connection closed")
+                except:
+                    pass
             logger.info("Service stopped")
 
 
 async def main():
     """Main entry point"""
     # Allow override via environment variables
-    websocket_url = os.getenv('WEBSOCKET_URL', 'ws://127.0.0.1:25520/v1/events')
+    dev_mode = os.getenv('DEV_MODE', 'false').lower() == 'true'
+    
+    # If dev mode is enabled, it will override websocket URL and disable database inserts
+    if not dev_mode:
+        websocket_url = os.getenv('WEBSOCKET_URL', 'ws://127.0.0.1:25520/v1/events')
+        test_mode = os.getenv('TEST_MODE', 'false').lower() == 'true'
+    else:
+        # Dev mode will set these internally
+        websocket_url = None
+        test_mode = False
+    
     symbol = os.getenv('SYMBOL', 'SPY')
-    test_mode = os.getenv('TEST_MODE', 'false').lower() == 'true'
     
     service = LiveStockIngestService(
         websocket_url=websocket_url,
         symbol=symbol,
-        test_mode=test_mode
+        test_mode=test_mode,
+        dev_mode=dev_mode
     )
     await service.run()
 
@@ -882,4 +1075,3 @@ if __name__ == "__main__":
         print(f"FATAL ERROR: {e}", file=sys.stderr, flush=True)
         sys.stderr.flush()
         sys.exit(1)
-

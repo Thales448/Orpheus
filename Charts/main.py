@@ -35,11 +35,11 @@ class SyntxDB():
         
         # Direct database connection for options
         self.db_conn = psycopg2.connect(
-            host="192.168.1.87",
+            host="192.168.1.92",
             port=5432,
             database="historical",
             user="postgres",
-            password="postgres",
+            password="password",
             cursor_factory=psycopg2.extras.RealDictCursor
         )
 

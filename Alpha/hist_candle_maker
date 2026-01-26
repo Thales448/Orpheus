@@ -1,0 +1,336 @@
+#!/usr/bin/env python3
+"""
+Historical Candle Maker
+Creates candles from quote data in the syntx database.
+
+Usage:
+    python hist_candle_maker <ticker> <start_date> <end_date> <candle_freq>
+
+Arguments:
+    ticker: Stock ticker symbol (e.g., AAPL, SPY)
+    start_date: Start date in YYYY-MM-DD format
+    end_date: End date in YYYY-MM-DD format
+    candle_freq: Candle frequency (1m, 5m, 15m, 30m, 1h, 4h, 1d)
+
+Example:
+    python hist_candle_maker AAPL 2024-01-01 2024-01-31 1m
+"""
+
+import sys
+import argparse
+from datetime import datetime, timedelta
+import pandas as pd
+from pathlib import Path
+
+# Add parent directory to path to import DatabaseConnection
+sys.path.insert(0, str(Path(__file__).parent.parent / 'Charts'))
+from DatabaseConnection import DatabaseConnection
+
+
+def parse_candle_freq(freq):
+    """Parse candle frequency string and return pandas offset alias."""
+    freq_map = {
+        '1m': '1min',
+        '5m': '5min',
+        '15m': '15min',
+        '30m': '30min',
+        '1h': '1H',
+        '4h': '4H',
+        '1d': '1D',
+        '1w': '1W',
+    }
+    if freq.lower() not in freq_map:
+        raise ValueError(f"Unsupported candle frequency: {freq}. Supported: {', '.join(freq_map.keys())}")
+    return freq_map[freq.lower()]
+
+
+def get_ticker_id(db, ticker):
+    """Get ticker_id from public.tickers table."""
+    try:
+        with db.connection.cursor() as cursor:
+            cursor.execute("SELECT id FROM public.tickers WHERE ticker = %s", (ticker.upper(),))
+            result = cursor.fetchone()
+            if not result:
+                raise ValueError(f"Ticker '{ticker}' not found in public.tickers table")
+            return result[0]
+    except Exception as e:
+        raise Exception(f"Error fetching ticker_id for {ticker}: {e}")
+
+
+def fetch_quotes(db, ticker_id, start_date, end_date):
+    """Fetch quotes from stocks.quote table for the given period."""
+    try:
+        # Convert dates to datetime strings
+        start_datetime = f"{start_date} 00:00:00"
+        end_datetime = f"{end_date} 23:59:59"
+        
+        query = """
+            SELECT 
+                timestamp,
+                bid,
+                bid_size,
+                ask,
+                ask_size
+            FROM stocks.quote
+            WHERE ticker_id = %s
+              AND timestamp >= %s
+              AND timestamp <= %s
+            ORDER BY timestamp ASC
+        """
+        
+        with db.connection.cursor() as cursor:
+            cursor.execute(query, (ticker_id, start_datetime, end_datetime))
+            rows = cursor.fetchall()
+            
+        if not rows:
+            print(f"No quotes found for the specified period")
+            return None
+            
+        # Convert to DataFrame
+        df = pd.DataFrame(rows, columns=['timestamp', 'bid', 'bid_size', 'ask', 'ask_size'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        
+        return df
+    except Exception as e:
+        raise Exception(f"Error fetching quotes: {e}")
+
+
+def aggregate_candles(quotes_df, freq):
+    """Aggregate quotes into candles based on frequency."""
+    if quotes_df is None or len(quotes_df) == 0:
+        return None
+    
+    # Calculate mid price (bid + ask) / 2
+    quotes_df['mid_price'] = (quotes_df['bid'] + quotes_df['ask']) / 2
+    
+    # Calculate volume proxy (average of bid_size and ask_size)
+    quotes_df['volume'] = (quotes_df['bid_size'] + quotes_df['ask_size']) / 2
+    
+    # Set timestamp as index for resampling
+    quotes_df.set_index('timestamp', inplace=True)
+    
+    # Resample to create candles
+    freq_alias = parse_candle_freq(freq)
+    
+    candles = quotes_df['mid_price'].resample(freq_alias).agg({
+        'mid_price': ['first', 'max', 'min', 'last']
+    }).rename(columns={
+        'first': 'open',
+        'max': 'high',
+        'min': 'low',
+        'last': 'close'
+    })
+    
+    # Flatten column names
+    candles.columns = ['open', 'high', 'low', 'close']
+    
+    # Aggregate volume
+    volume_agg = quotes_df['volume'].resample(freq_alias).sum()
+    candles['volume'] = volume_agg
+    
+    # Reset index to have time as a column
+    candles.reset_index(inplace=True)
+    candles.rename(columns={'timestamp': 'time'}, inplace=True)
+    
+    # Remove any candles with NaN values (incomplete periods)
+    candles = candles.dropna()
+    
+    return candles
+
+
+def detect_candle_patterns(candles):
+    """Detect and print common candle patterns."""
+    if candles is None or len(candles) == 0:
+        return
+    
+    patterns = []
+    
+    for i in range(len(candles)):
+        row = candles.iloc[i]
+        time = row['time']
+        open_price = row['open']
+        high = row['high']
+        low = row['low']
+        close = row['close']
+        volume = row['volume']
+        
+        body = abs(close - open_price)
+        upper_shadow = high - max(open_price, close)
+        lower_shadow = min(open_price, close) - low
+        total_range = high - low
+        
+        # Skip if no range
+        if total_range == 0:
+            continue
+        
+        body_ratio = body / total_range if total_range > 0 else 0
+        is_bullish = close > open_price
+        is_bearish = close < open_price
+        
+        pattern = None
+        pattern_desc = ""
+        
+        # Doji (very small body)
+        if body_ratio < 0.1:
+            pattern = "DOJI"
+            pattern_desc = "Indecision - buyers and sellers in balance"
+        
+        # Hammer (small body at top, long lower shadow)
+        elif body_ratio < 0.3 and lower_shadow > 2 * body and upper_shadow < body * 0.5:
+            pattern = "HAMMER" if is_bullish else "HANGING_MAN"
+            pattern_desc = "Potential reversal - buyers stepping in" if is_bullish else "Potential reversal - sellers taking control"
+        
+        # Shooting Star (small body at bottom, long upper shadow)
+        elif body_ratio < 0.3 and upper_shadow > 2 * body and lower_shadow < body * 0.5:
+            pattern = "SHOOTING_STAR" if is_bearish else "INVERTED_HAMMER"
+            pattern_desc = "Potential reversal - sellers stepping in" if is_bearish else "Potential reversal - buyers testing"
+        
+        # Marubozu (no shadows, full body)
+        elif body_ratio > 0.9:
+            pattern = "BULLISH_MARUBOZU" if is_bullish else "BEARISH_MARUBOZU"
+            pattern_desc = "Strong momentum" + (" - buyers in control" if is_bullish else " - sellers in control")
+        
+        # Engulfing patterns (compare with previous candle)
+        if i > 0:
+            prev = candles.iloc[i-1]
+            prev_body = abs(prev['close'] - prev['open'])
+            
+            # Bullish Engulfing
+            if prev['close'] < prev['open'] and is_bullish and open_price < prev['close'] and close > prev['open']:
+                pattern = "BULLISH_ENGULFING"
+                pattern_desc = "Strong reversal signal - buyers overwhelming sellers"
+            
+            # Bearish Engulfing
+            elif prev['close'] > prev['open'] and is_bearish and open_price > prev['close'] and close < prev['open']:
+                pattern = "BEARISH_ENGULFING"
+                pattern_desc = "Strong reversal signal - sellers overwhelming buyers"
+        
+        if pattern:
+            patterns.append({
+                'time': time,
+                'pattern': pattern,
+                'description': pattern_desc,
+                'open': open_price,
+                'high': high,
+                'low': low,
+                'close': close,
+                'volume': volume
+            })
+    
+    return patterns
+
+
+def print_candles(candles, patterns=None):
+    """Print candles in a formatted table."""
+    if candles is None or len(candles) == 0:
+        print("No candles to display")
+        return
+    
+    print(f"\n{'='*100}")
+    print(f"CANDLE DATA ({len(candles)} candles)")
+    print(f"{'='*100}")
+    print(f"{'Time':<20} {'Open':>10} {'High':>10} {'Low':>10} {'Close':>10} {'Volume':>12}")
+    print(f"{'-'*100}")
+    
+    for _, row in candles.iterrows():
+        print(f"{str(row['time']):<20} {row['open']:>10.4f} {row['high']:>10.4f} "
+              f"{row['low']:>10.4f} {row['close']:>10.4f} {row['volume']:>12.0f}")
+    
+    if patterns:
+        print(f"\n{'='*100}")
+        print(f"CANDLE PATTERNS DETECTED ({len(patterns)} patterns)")
+        print(f"{'='*100}")
+        print(f"{'Time':<20} {'Pattern':<25} {'Description':<50}")
+        print(f"{'-'*100}")
+        
+        for p in patterns:
+            print(f"{str(p['time']):<20} {p['pattern']:<25} {p['description']:<50}")
+            print(f"  O:{p['open']:.4f} H:{p['high']:.4f} L:{p['low']:.4f} C:{p['close']:.4f} V:{p['volume']:.0f}")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Create candles from quote data in syntx database',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python hist_candle_maker AAPL 2024-01-01 2024-01-31 1m
+  python hist_candle_maker SPY 2024-01-01 2024-01-15 5m
+  python hist_candle_maker QQQ 2024-01-01 2024-01-31 1h
+        """
+    )
+    
+    parser.add_argument('ticker', help='Stock ticker symbol (e.g., AAPL, SPY)')
+    parser.add_argument('start_date', help='Start date in YYYY-MM-DD format')
+    parser.add_argument('end_date', help='End date in YYYY-MM-DD format')
+    parser.add_argument('candle_freq', help='Candle frequency (1m, 5m, 15m, 30m, 1h, 4h, 1d)')
+    
+    args = parser.parse_args()
+    
+    # Validate date formats
+    try:
+        datetime.strptime(args.start_date, '%Y-%m-%d')
+        datetime.strptime(args.end_date, '%Y-%m-%d')
+    except ValueError:
+        print("Error: Dates must be in YYYY-MM-DD format")
+        sys.exit(1)
+    
+    # Validate candle frequency
+    try:
+        parse_candle_freq(args.candle_freq)
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+    
+    # Connect to database
+    print(f"Connecting to database...")
+    db = None
+    try:
+        db = DatabaseConnection()
+        print(f"Connected to database")
+        
+        # Get ticker_id
+        print(f"Looking up ticker '{args.ticker}'...")
+        ticker_id = get_ticker_id(db, args.ticker)
+        print(f"Found ticker_id: {ticker_id}")
+        
+        # Fetch quotes
+        print(f"Fetching quotes from {args.start_date} to {args.end_date}...")
+        quotes_df = fetch_quotes(db, ticker_id, args.start_date, args.end_date)
+        
+        if quotes_df is None or len(quotes_df) == 0:
+            print("No quotes found for the specified period")
+            return
+        
+        print(f"Retrieved {len(quotes_df)} quotes")
+        
+        # Aggregate into candles
+        print(f"Aggregating quotes into {args.candle_freq} candles...")
+        candles = aggregate_candles(quotes_df, args.candle_freq)
+        
+        if candles is None or len(candles) == 0:
+            print("No candles could be created from the quotes")
+            return
+        
+        print(f"Created {len(candles)} candles")
+        
+        # Detect patterns
+        print("Detecting candle patterns...")
+        patterns = detect_candle_patterns(candles)
+        
+        # Print results
+        print_candles(candles, patterns)
+        
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+    finally:
+        if db:
+            db.close()
+
+
+if __name__ == '__main__':
+    main()
+
