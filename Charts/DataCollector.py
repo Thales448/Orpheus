@@ -9,6 +9,7 @@ import logging
 import DatabaseConnection
 import httpx
 import csv
+import time
 HEADERS ='hello'
 
 
@@ -408,7 +409,6 @@ class DataCollector():
         date = end_date - (timedelta(365)*10)
         params = {'symbol': ticker, 'interval': 'daily', 'start': date, 'end': end_date, 'session_filter': 'all'}
         response = requests.get(
-            HISTORY_URL,
             params=params,
             headers=self.MD_HEADER
         )
@@ -438,51 +438,41 @@ class DataCollector():
         self.db.insert_stock_candles(data_tuples)
 
 
-    def theta_bulk_options(self, params=None):
+    def theta_options_quotes(
+        self,
+        symbol: str,
+        date: str,
+        expiration: str = "*",
+        strike: str = "*",
+        right: str = "both",
+        start_time: str = "09:30:00",
+        end_time: str = "16:00:00",
+        interval: str = "1m",
+        format: str = "csv",
+        base_url: str = "http://localhost:25503/v3",
+        timeout: int = 90
+    ):
         """
-        Collect historical minute data from ThetaData server. Needed Paramaters include
-        
-        exp: integer in format YYYYMMDD
-        date: integer 
-        end_date: integer
-        symbol: string
-        ivl: integer (in milliseconds)
+        Returns all option quotes for all contracts (or a given expiration/strike/right) from Theta Terminal v3.
+        Docs: /option/history/quote endpoint.
         """
-        selector_list = [
-            'eod', 'ohlc', 'quote', 'open_interest' , 'trades', 'trade_quote']
-        
-        if params['selector'] not in selector_list:
-            print(f'selector must be set to either ({selector_list})')
-            
+        import httpx
 
-        BASE_URL = 'http://127.0.0.1:25503/v3'
-        
-        paramaters = {'exp': params['exp'], 
-                  'date': params['date'],
-                  'end_date': params['end_date'],
-                  'use_csv': 'false',
-                  'symbol': params['symbol'],
-                  'ivl':   params['ivl'] 
+        url = f"{base_url}/option/history/quote"
+        params = {
+            "symbol": symbol,
+            "date": date,
+            "expiration": expiration,
+            "strike": strike,
+            "right": right,
+            "start_time": start_time,
+            "end_time": end_time,
+            "interval": interval,
+            "format": format,
         }
-        
-         
-        url = BASE_URL + f"/bulk_hist/option/{params['selector']}/'"
-        
-        data = []
-
-        while url is not None:
-            response = httpx.get(url, params=paramaters, timeout=90)
-            if response.status_code==200:
-                data.append(response.json())
-            else:
-                return f"Error {response.raise_for_status()}"
-
-            if 'Next-Page' in response.headers and response.headers['Next-Page'] != "null":
-                url = response.headers['Next-Page']
-                paramaters = None 
-            else: 
-                url = None
-        return data
+        resp = httpx.get(url, params=params, timeout=timeout)
+        resp.raise_for_status()
+        return resp.text if format == "csv" else resp.json()
 
 
     def theta_stocks_quote(
@@ -551,14 +541,27 @@ class DataCollector():
 
         for fetch_date in dates_to_fetch:
             params["date"] = fetch_date
+            self.logger.info(f"Fetching quotes for {ticker} on {fetch_date} from {url}")
 
             try:
                 if format == "csv":
+                    self.logger.debug(f"Starting streaming request for {ticker} {fetch_date}...")
                     with httpx.stream("GET", url, params=params, timeout=60) as response:
                         response.raise_for_status()
+                        self.logger.debug(f"HTTP response received for {ticker} {fetch_date}, status: {response.status_code}")
                         first_line = True
+                        line_count = 0
+                        last_log_time = time.time()
+                        log_interval = 5.0  # Log progress every 5 seconds
 
                         for line in response.iter_lines():
+                            line_count += 1
+                            current_time = time.time()
+                            
+                            # Log progress every N seconds
+                            if current_time - last_log_time >= log_interval:
+                                self.logger.debug(f"Processing {ticker} {fetch_date}: {line_count} lines read, {len(all_results)} records parsed so far...")
+                                last_log_time = current_time
                             line = line.decode() if hasattr(line, "decode") else line
                             if not line.strip():
                                 continue
@@ -636,6 +639,8 @@ class DataCollector():
                             except (ValueError, IndexError) as e:
                                 self.logger.warning(f"Could not parse row: {line[:100]} -> {e}")
                                 continue
+                    
+                    self.logger.info(f"Completed streaming for {ticker} {fetch_date}: {line_count} lines processed, {len(all_results)} total records collected so far")
                 else:
                     # Use requests for non-CSV formats (not commonly used, fallback logic)
                     response = requests.get(url, params=params, timeout=60)
@@ -674,44 +679,13 @@ if __name__ == "__main__":
     db = DatabaseConnection.DatabaseConnection()
     data_collector = DataCollector(db)
 
-    # Quick tests for the new function theta_options_quotes
-
-    # Test 1: Basic usage with required parameters
-    results = data_collector.theta_options_quotes(
+    x= data_collector.theta_options_quotes(
         symbol="AAPL",
-        date="20240105"
-    )
-    print(f"Test 1 - Results count for AAPL 20240105: {len(results)}")
-
-    # Test 2: Range of dates
-    results = data_collector.theta_options_quotes(
-        symbol="MSFT",
-        date="20240103",
-        end_date="20240105"
-    )
-    print(f"Test 2 - Results count for MSFT 20240103-20240105: {len(results)}")
-
-    # Test 3: With specific expiration and strike
-    results = data_collector.theta_options_quotes(
-        symbol="SPY",
         date="20240102",
-        expiration="20240119",
-        strike="450",
-        right="call"
+        expiration="20240102",
+        interval="1s",
+        format="json"
     )
-    print(f"Test 3 - Results count for SPY 20240102 expiration 20240119 strike 450 call: {len(results)}")
-
-    # Test 4: Nonexistent symbol (should handle gracefully)
-    results = data_collector.theta_options_quotes(
-        symbol="FAKE123",
-        date="20240102"
-    )
-    print(f"Test 4 - Results count for FAKE123: {results}")
-
-    # Test 5: Bad date format (should handle error and return empty or None)
-    results = data_collector.theta_options_quotes(
-        symbol="AAPL",
-        date="bad-date"
-    )
-    print(f"Test 5 - Results for bad date input: {results}")
+    print(x)
+    # Quick tests for the new function theta_options_quotes
 

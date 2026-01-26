@@ -26,3 +26,6 @@ waitress>=2.1.0  # Production WSGI server
 # Optional: For enhanced performance
 # asyncpg>=0.28.0  # Async support
 # sqlalchemy>=1.4.0  # Advanced ORM features
+
+# Redis support for live data streaming
+redis>=5.0.0  # Async Redis client for live stock data forwarding
