@@ -1,0 +1,1 @@
+RoutePropsBuilder<_, fn(SymbolWorkspaceProps) -> impl leptos::IntoView {SymbolWorkspace}, &str, ((&str,), (fn(SymbolWorkspaceProps) -> impl leptos::IntoView {SymbolWorkspace},), (), (), (), (), ())>

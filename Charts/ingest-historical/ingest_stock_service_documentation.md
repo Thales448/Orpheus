@@ -72,6 +72,40 @@ curl http://localhost:8080/health
 
 ---
 
+### Help (Endpoints & Examples)
+
+**GET** `/help` or **GET** `/api/v1/help`
+
+Returns all available endpoints, short descriptions, and example `curl` commands. The base URL in examples matches the request host. Default is JSON; use query `?format=text` for human-readable plain text.
+
+**Response:**
+```json
+{
+  "service": "Historical Stock Ingestion Service",
+  "description": "Fetches historical stock quote data from Theta Terminal API...",
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "description": "Check if the service is running.",
+      "example": "curl http://localhost:8080/health"
+    },
+    ...
+  ]
+}
+```
+
+**Examples:**
+```bash
+# JSON (default)
+curl http://localhost:8080/help
+
+# Human-readable plain text
+curl "http://localhost:8080/help?format=text"
+```
+
+---
+
 ### Get Service Status
 
 **GET** `/api/v1/status`

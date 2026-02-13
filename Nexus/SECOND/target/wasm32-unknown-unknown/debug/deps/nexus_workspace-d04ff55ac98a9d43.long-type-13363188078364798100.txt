@@ -1,0 +1,1 @@
+RoutePropsBuilder<_, fn(OptionsWorkspaceProps) -> impl leptos::IntoView {OptionsWorkspace}, &str, ((&str,), (fn(OptionsWorkspaceProps) -> impl leptos::IntoView {OptionsWorkspace},), (), (), (), (), ())>

@@ -49,6 +49,102 @@ class DataCollector():
             self.logger.error(f"Error collecting expiration dates: {e}")
             return None
 
+    def theta_option_list_expirations(self, symbol: str, base_url: str = "http://localhost:25503/v3") -> list:
+        """
+        List all expirations for an option with a given symbol.
+        GET /v3/option/list/expirations?symbol=AAPL
+        Returns list of expiration integers (YYYYMMDD) or empty list on error.
+        Handles JSON or plain/text (one expiration per line) responses.
+        """
+        url = f"{base_url.rstrip('/')}/option/list/expirations"
+        resp = None
+        try:
+            resp = httpx.get(url, params={"symbol": symbol}, timeout=30)
+            resp.raise_for_status()
+            text = resp.text.strip()
+            if not text:
+                self.logger.warning(f"Option list/expirations for {symbol}: empty response body")
+                return []
+            content_type = (resp.headers.get("content-type") or "").lower()
+            if "json" in content_type:
+                try:
+                    data = resp.json()
+                except Exception:
+                    data = None
+                if data is not None:
+                    out = data.get("response") or data.get("expirations") or data
+                    if isinstance(out, list):
+                        return [int(x) for x in out if str(x).isdigit()]
+                    return []
+            # Plain text / CSV: one expiration per line (or fallback if JSON failed)
+            expirations = []
+            for line in text.splitlines():
+                line = line.strip()
+                if line.isdigit() and len(line) == 8:
+                    expirations.append(int(line))
+                else:
+                    for part in line.replace(",", " ").split():
+                        if part.isdigit() and len(part) == 8:
+                            expirations.append(int(part))
+            return sorted(expirations) if expirations else []
+        except Exception as e:
+            self.logger.error(f"Error listing option expirations for {symbol}: {e}")
+            if resp is not None and getattr(resp, "text", None):
+                self.logger.debug(f"Response body (first 200 chars): {resp.text[:200]!r}")
+            return []
+
+    def theta_option_list_dates_quote(self, symbol: str, expiration: str, base_url: str = "http://localhost:25503/v3") -> list:
+        """
+        List all dates that have option quote data for a given symbol and expiration.
+        GET /v3/option/list/dates/quote?symbol=AAPL&expiration=20220930
+        Returns list of date strings (YYYYMMDD) or empty list on error.
+        """
+        url = f"{base_url.rstrip('/')}/option/list/dates/quote"
+        exp_str = str(expiration)
+        if len(exp_str) == 8 and exp_str.isdigit():
+            pass
+        else:
+            try:
+                from datetime import datetime
+                exp_str = datetime.strptime(exp_str, "%Y-%m-%d").strftime("%Y%m%d")
+            except ValueError:
+                self.logger.warning(f"Invalid expiration format for list dates: {expiration}")
+                return []
+        try:
+            resp = httpx.get(url, params={"symbol": symbol, "expiration": exp_str}, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("response") or []
+        except Exception as e:
+            self.logger.debug(f"Error listing quote dates for {symbol} exp {expiration}: {e}")
+            return []
+
+    def theta_option_list_strikes(self, symbol: str, expiration: str, base_url: str = "http://localhost:25503/v3") -> list:
+        """
+        List all strikes for an option with a given symbol and expiration.
+        GET /v3/option/list/strikes?symbol=AAPL&expiration=20220930
+        Returns list of strike numbers or empty list on error.
+        """
+        url = f"{base_url.rstrip('/')}/option/list/strikes"
+        exp_str = str(expiration)
+        if len(exp_str) == 8 and exp_str.isdigit():
+            pass
+        else:
+            try:
+                from datetime import datetime
+                exp_str = datetime.strptime(exp_str, "%Y-%m-%d").strftime("%Y%m%d")
+            except ValueError:
+                self.logger.warning(f"Invalid expiration format for list strikes: {expiration}")
+                return []
+        try:
+            resp = httpx.get(url, params={"symbol": symbol, "expiration": exp_str}, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("response") or []
+        except Exception as e:
+            self.logger.debug(f"Error listing strikes for {symbol} exp {expiration}: {e}")
+            return []
+
     def theta_options_quotes(
         self,
         symbol: str,

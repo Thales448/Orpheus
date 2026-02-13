@@ -1,0 +1,14 @@
+/home/rodri/Documents/Workspace/Orpheus/Nexus/Third/target/wasm32-unknown-unknown/debug/deps/serde-18d4ca4fe1e074b3.d: /home/rodri/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/rodri/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/rodri/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/rodri/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/rodri/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/rodri/Documents/Workspace/Orpheus/Nexus/Third/target/wasm32-unknown-unknown/debug/build/serde-9f84a6c35a5a4ac2/out/private.rs
+
+/home/rodri/Documents/Workspace/Orpheus/Nexus/Third/target/wasm32-unknown-unknown/debug/deps/libserde-18d4ca4fe1e074b3.rlib: /home/rodri/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/rodri/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/rodri/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/rodri/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/rodri/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/rodri/Documents/Workspace/Orpheus/Nexus/Third/target/wasm32-unknown-unknown/debug/build/serde-9f84a6c35a5a4ac2/out/private.rs
+
+/home/rodri/Documents/Workspace/Orpheus/Nexus/Third/target/wasm32-unknown-unknown/debug/deps/libserde-18d4ca4fe1e074b3.rmeta: /home/rodri/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/rodri/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/rodri/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/rodri/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/rodri/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/rodri/Documents/Workspace/Orpheus/Nexus/Third/target/wasm32-unknown-unknown/debug/build/serde-9f84a6c35a5a4ac2/out/private.rs
+
+/home/rodri/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs:
+/home/rodri/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs:
+/home/rodri/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs:
+/home/rodri/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:
+/home/rodri/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs:
+/home/rodri/Documents/Workspace/Orpheus/Nexus/Third/target/wasm32-unknown-unknown/debug/build/serde-9f84a6c35a5a4ac2/out/private.rs:
+
+# env-dep:OUT_DIR=/home/rodri/Documents/Workspace/Orpheus/Nexus/Third/target/wasm32-unknown-unknown/debug/build/serde-9f84a6c35a5a4ac2/out

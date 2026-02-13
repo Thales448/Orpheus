@@ -1,6 +1,7 @@
 # Data & Utilities
 numpy>=1.20
 pandas
+pyarrow
 scipy
 requests
 tqdm

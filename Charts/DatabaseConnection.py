@@ -113,7 +113,7 @@ class DatabaseConnection():
             bid, bid_size, bid_exchange, bid_condition,
             ask, ask_size, ask_exchange, ask_condition
         ) VALUES %s
-        ON CONFLICT DO NOTHING
+        ON CONFLICT (time, contract_id) DO NOTHING
         """
 
         try:
@@ -202,48 +202,7 @@ class DatabaseConnection():
             self.connection.rollback()
             self.logger.error(f"Error inserting stock candle data: {e}")
             raise e
-
-    def insert_crypto(self, coin = str, data = list):
-        """
-        inserts crypto data for coin passed takes input as tuple of the form:
-        (ts,open, high, low, close, volume)
-        """
-        insert_query = f"""
-            INSERT INTO crypto.{coin} (ts, open_price, high_price, low_price, close_price, volume)
-            VALUES %s;
-        """
-        try:
-            with self.connection.cursor() as cursor:
-                extras.execute_values(cursor, insert_query, data)
-                self.connection.commit()
-                self.logger.info(f"Data insert into crypto.{coin} successful.")
-        except psycopg2.Error as e:
-            self.connection.rollback()
-            self.logger.error(f"Error inserting crypto.{coin} data: {e}")
-            raise e
-    
-    def insert_crytpo_csv(self, csv_path, coin: str):
-        
-        with open("/workspace/btcusd_1-min_data.csv", "r") as f:
-            csv_reader = csv.reader(f)
-
-        next(csv_reader, None)
-
-        rows_as_tuples = []
-        for row in csv_reader:
-            if not row[0] or not row[1] or not row[2] or not row[3] or not row[4] or not row[5]:
-                continue
-            # row[0] => timestamp, row[1] => open, row[2] => high, etc.
-            ts      = datetime.datetime.fromtimestamp(int(float(row[0])))
-            o_price = float(row[1])
-            h_price = float(row[2])
-            l_price = float(row[3])
-            c_price = float(row[4])
-            vol     = float(row[5])
-            
-            rows_as_tuples.append((ts, open, h_price, l_price, c_price, vol))
-        conn.insert_crypto(coin=coin, data=csv_list_of_tuples)
-    
+ 
     def insert_new_command(self, query_string):
         """
         Pass a SQL query to the db1 database and return the appropriate result.
@@ -275,27 +234,6 @@ class DatabaseConnection():
             self.logger.error(f"Unexpected error: {ex}")
             raise ex
 
-    def copy_csv(self, table: str, csv_path: str):
-        """
-        Efficiently loads a CSV file into a PostgreSQL/TimescaleDB hypertable.
-        Assumes CSV has header and values matching table columns exactly.
-        """
-        try:
-            with self.connection.cursor() as cursor:
-                with open(csv_path, 'r') as f:
-                    # Skip header
-                    next(f)
-                    cursor.copy_expert(
-                        sql.SQL("COPY {} FROM STDIN WITH CSV").format(sql.Identifier(*table.split('.'))),
-                        f
-                    )
-                self.connection.commit()
-                self.logger.info(f"Copied data from {csv_path} into {table}")
-        except Exception as e:
-            self.connection.rollback()
-            self.logger.error(f"Failed to copy CSV into {table}: {e}")
-            raise
-
     def get_or_create_root(self, root):
         with self.connection.cursor() as cursor:
             if type(root) == int:
@@ -325,6 +263,13 @@ class DatabaseConnection():
             self.connection.commit()
             return cursor.fetchone()[0]
 
+    def get_or_create_options_ticker(self, ticker: str):
+        """
+        Return public.tickers id for the given ticker (single source of truth).
+        Same as get_or_create_root: ensures ticker exists in public.tickers and returns id.
+        """
+        return self.get_or_create_root(ticker)
+
     def get_or_create_contract(self, contract):
         with self.connection.cursor() as cursor:
             try:
@@ -342,11 +287,11 @@ class DatabaseConnection():
                 strike = contract['strike']
                 side = contract['right']
 
-                # Get ticker_id
-                cursor.execute("SELECT id FROM options.tickers WHERE ticker = %s", (contract['root'],))
+                # Get ticker_id from public.tickers (single source of truth)
+                cursor.execute("SELECT id FROM public.tickers WHERE ticker = %s", (contract['root'],))
                 result = cursor.fetchone()
                 if not result:
-                    self.logger.error(f"Ticker '{contract['root']}' not found.")
+                    self.logger.error(f"Ticker '{contract['root']}' not found in public.tickers.")
                     return None
                 ticker_id = result[0]
 
@@ -387,7 +332,7 @@ class DatabaseConnection():
                     cursor.execute("""
                         SELECT DISTINCT e.expiration
                         FROM options.expirations e
-                        JOIN options.tickers t ON t.id = e.ticker_id
+                        JOIN public.tickers t ON t.id = e.ticker_id
                         WHERE t.ticker = %s
                         AND e.expiration >= %s
                         AND EXISTS (
@@ -400,7 +345,7 @@ class DatabaseConnection():
                     cursor.execute("""
                         SELECT DISTINCT e.expiration
                         FROM options.expirations e
-                        JOIN options.tickers t ON t.id = e.ticker_id
+                        JOIN public.tickers t ON t.id = e.ticker_id
                         WHERE t.ticker = %s
                         AND EXISTS (
                             SELECT 1 FROM options.contracts c
@@ -416,138 +361,6 @@ class DatabaseConnection():
             self.logger.error(f"❌ Failed to get expirations for {ticker}: {e}")
             return []
 
-    def get_stock_data(self, ticker: str, resolution: str = "daily", start_time: str = None, end_time: str = None):
-            """
-            Retrieve stock OHLCV data for a specified ticker and time resolution.
-            - Intraday resolutions (minute, 5m, 10m, 15m, 30m, hourly) are from stocks.minute.
-            - Daily, weekly, and monthly data are from stocks.daily.
-            """
-            
-            # Set default end_time if only start_time is defined
-            if start_time and not end_time:
-                end_time = datetime.datetime.now().strftime("%Y-%m-%d")  # Get today's date in the "YYYY-MM-DD" format
-            
-            # Start building the SQL query
-            ticker_id = self.get_or_create_root(ticker)
-            where_clause = f"WHERE ticker_id = {ticker_id}"
-            
-            # Add date filters if start_time or end_time are provided
-            if start_time:
-                where_clause += f" AND time >= '{start_time}'"
-            if end_time:
-                where_clause += f" AND time <= '{end_time}'"
-
-            if resolution == "minute":
-                query = f"""
-                    SELECT time, open, high, low, close, volume
-                    FROM stocks.candles
-                    {where_clause}
-                    ORDER BY time ASC;
-                """
-                
-            elif resolution in ["5m", "10m", "15m", "30m"]:
-                interval = resolution.replace("m", "")
-                query = f"""
-                    WITH bars AS (
-                        SELECT DISTINCT ON (
-                            date_trunc('minute', time) - ((EXTRACT(MINUTE FROM time)::int %% {interval}) * INTERVAL '1 minute')
-                        )
-                        date_trunc('minute', time) - ((EXTRACT(MINUTE FROM time)::int %% {interval}) * INTERVAL '1 minute') AS bar_time,
-                        open, high, low, close, volume
-                        FROM stocks.candles
-                        {where_clause}
-                        ORDER BY date_trunc('minute', time) - ((EXTRACT(MINUTE FROM time)::int %% {interval}) * INTERVAL '1 minute'), time
-                    )
-                    SELECT * FROM bars
-                    ORDER BY bar_time;
-                """
-                
-            elif resolution == "hourly":
-                query = f"""
-                    WITH hourly_bars AS (
-                        SELECT DISTINCT ON (date_trunc('hour', time))
-                            date_trunc('hour', time) AS hour_time,
-                            open, high, low, close, volume
-                        FROM stocks.candles
-                        {where_clause}
-                        ORDER BY date_trunc('hour', time), time
-                    )
-                    SELECT * FROM hourly_bars
-                    ORDER BY hour_time;
-                """
-                
-            elif resolution == "daily":
-                query = f"""
-                    SELECT
-                        bar_time,
-                        open_arr[1] AS open,
-                        high,
-                        low,
-                        close_arr[1] AS close,
-                        volume
-                    FROM (
-                        SELECT
-                            date_trunc('day', time) AS bar_time,
-                            ARRAY_AGG(open ORDER BY time ASC) AS open_arr,
-                            MAX(high) AS high,
-                            MIN(low) AS low,
-                            ARRAY_AGG(close ORDER BY time DESC) AS close_arr,
-                            SUM(volume) AS volume
-                        FROM stocks.candles
-                        {where_clause}
-                        GROUP BY bar_time
-                    ) x
-                    ORDER BY bar_time ASC;
-                """
-
-
-                
-            elif resolution == "weekly":
-                query = f"""
-                    WITH weekly_bars AS (
-                        SELECT DISTINCT ON (date_trunc('week', time))
-                            date_trunc('week', time) AS week_time,
-                            open, high, low, close, volume
-                        FROM stocks.candles
-                        {where_clause}
-                        ORDER BY date_trunc('week', time), time
-                    )
-                    SELECT * FROM weekly_bars
-                    ORDER BY week_time;
-                """
-                
-            elif resolution == "monthly":
-                query = f"""
-                    WITH monthly_bars AS (
-                        SELECT DISTINCT ON (date_trunc('month', time))
-                            date_trunc('month', time) AS month_time,
-                            open, high, low, close, volume
-                        FROM stocks.candles
-                        {where_clause}
-                        ORDER BY date_trunc('month', time), time
-                    )
-                    SELECT * FROM monthly_bars
-                    ORDER BY month_time;
-                """
-                
-            else:
-                self.logger.error(f"Invalid resolution: {resolution}")
-                return []
-
-            try:
-                with self.connection.cursor() as cursor:
-                    cursor.execute(query, (ticker,))
-                    rows = cursor.fetchall()
-                    if len(rows) == 0:
-                        self.logger.error(f"No data found for {ticker}  at {resolution} ticks")
-                        return []
-                    # Augment the log message with the start_time, end_time, and resolution.
-                    self.logger.info(f"Retrieved {len(rows)} rows of {ticker} from {start_time} to {end_time} at {resolution} candle sticks")
-                    return rows
-            except psycopg2.Error as e:
-                self.logger.error(f"Error retrieving stock data: {e}")
-                raise e
-    
     def get_stock_quotes(self, ticker: str, date: str = None, interval: str = "1s", start_time: str = None, end_time: str = None):
         """
         Retrieve stock quotes for a specified ticker and time range.
@@ -555,7 +368,11 @@ class DatabaseConnection():
         Parameters:
             ticker (str): The ticker symbol or identifier.
             date (str, optional): Single day in 'YYYY-MM-DD' format (only if start_time/end_time not given).
-            interval (str): Only allowed value is "1s", which returns raw quotes. (Kept for compatibility)
+            interval (str): Time interval for quotes. Supported values:
+                - "1s": Raw quotes (default)
+                - "1m", "5m", "10m", "15m", "30m": Minute intervals
+                - "1h": Hourly intervals
+                - "1d": Daily intervals
             start_time (str, optional): Start datetime 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DD'.
             end_time (str, optional): End datetime 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DD'.
 
@@ -564,10 +381,6 @@ class DatabaseConnection():
                 (timestamp, ticker_id, bid, bid_size, bid_exchange, bid_condition,
                  ask, ask_size, ask_exchange, ask_condition)
         """
-        if interval != "1s":
-            self.logger.error(f"Only interval='1s' is supported for get_stock_quotes.")
-            return []
-
         # Determine ticker_id (from public.tickers)
         try:
             with self.connection.cursor() as cursor:
@@ -597,18 +410,100 @@ class DatabaseConnection():
             params.append(end_time)
         # else: use all times for that ticker
 
-        select_fields = """
-            timestamp, ticker_id, bid, bid_size, bid_exchange, bid_condition,
-            ask, ask_size, ask_exchange, ask_condition
-        """
-        order_by = "ORDER BY timestamp ASC"
-
-        query = f"""
-            SELECT {select_fields}
-            FROM stocks.quote
-            WHERE ticker_id = %s {time_condition}
-            {order_by};
-        """
+        # Build query based on interval using TimescaleDB-optimized functions
+        if interval == "1s":
+            # Raw quotes - no aggregation
+            select_fields = """
+                timestamp, ticker_id, bid, bid_size, bid_exchange, bid_condition,
+                ask, ask_size, ask_exchange, ask_condition
+            """
+            order_by = "ORDER BY timestamp ASC"
+            query = f"""
+                SELECT {select_fields}
+                FROM stocks.quote
+                WHERE ticker_id = %s {time_condition}
+                {order_by};
+            """
+        elif interval.endswith("m"):
+            # Minute intervals: 1m, 5m, 10m, 15m, 30m - using TimescaleDB time_bucket() and LAST()
+            interval_minutes = int(interval.replace("m", ""))
+            if interval_minutes not in [1, 5, 10, 15, 30]:
+                self.logger.error(f"Unsupported minute interval: {interval}. Supported: 1m, 5m, 10m, 15m, 30m")
+                return []
+            
+            # Use TimescaleDB time_bucket() and LAST() for optimal performance
+            # Parameter order: [interval, ticker_id, ...time_condition_params, interval]
+            interval_str = f"{interval_minutes} minutes"
+            query_params = [interval_str, ticker_id]
+            if date and not (start_time or end_time):
+                query_params.append(date)
+            elif start_time and end_time:
+                query_params.extend([start_time, end_time])
+            elif start_time and not end_time:
+                query_params.append(start_time)
+            elif end_time and not start_time:
+                query_params.append(end_time)
+            query_params.append(interval_str)  # Second interval for GROUP BY
+            
+            query = f"""
+                SELECT 
+                    time_bucket(%s, timestamp) AS timestamp,
+                    ticker_id,
+                    LAST(bid, timestamp) AS bid,
+                    LAST(bid_size, timestamp) AS bid_size,
+                    LAST(bid_exchange, timestamp) AS bid_exchange,
+                    LAST(bid_condition, timestamp) AS bid_condition,
+                    LAST(ask, timestamp) AS ask,
+                    LAST(ask_size, timestamp) AS ask_size,
+                    LAST(ask_exchange, timestamp) AS ask_exchange,
+                    LAST(ask_condition, timestamp) AS ask_condition
+                FROM stocks.quote
+                WHERE ticker_id = %s {time_condition}
+                GROUP BY time_bucket(%s, timestamp), ticker_id
+                ORDER BY timestamp ASC;
+            """
+            params = query_params
+        elif interval == "1h":
+            # Hourly intervals - using TimescaleDB time_bucket() and LAST()
+            query = f"""
+                SELECT 
+                    time_bucket('1 hour', timestamp) AS timestamp,
+                    ticker_id,
+                    LAST(bid, timestamp) AS bid,
+                    LAST(bid_size, timestamp) AS bid_size,
+                    LAST(bid_exchange, timestamp) AS bid_exchange,
+                    LAST(bid_condition, timestamp) AS bid_condition,
+                    LAST(ask, timestamp) AS ask,
+                    LAST(ask_size, timestamp) AS ask_size,
+                    LAST(ask_exchange, timestamp) AS ask_exchange,
+                    LAST(ask_condition, timestamp) AS ask_condition
+                FROM stocks.quote
+                WHERE ticker_id = %s {time_condition}
+                GROUP BY time_bucket('1 hour', timestamp), ticker_id
+                ORDER BY timestamp ASC;
+            """
+        elif interval == "1d":
+            # Daily intervals - using TimescaleDB time_bucket() and LAST()
+            query = f"""
+                SELECT 
+                    time_bucket('1 day', timestamp) AS timestamp,
+                    ticker_id,
+                    LAST(bid, timestamp) AS bid,
+                    LAST(bid_size, timestamp) AS bid_size,
+                    LAST(bid_exchange, timestamp) AS bid_exchange,
+                    LAST(bid_condition, timestamp) AS bid_condition,
+                    LAST(ask, timestamp) AS ask,
+                    LAST(ask_size, timestamp) AS ask_size,
+                    LAST(ask_exchange, timestamp) AS ask_exchange,
+                    LAST(ask_condition, timestamp) AS ask_condition
+                FROM stocks.quote
+                WHERE ticker_id = %s {time_condition}
+                GROUP BY time_bucket('1 day', timestamp), ticker_id
+                ORDER BY timestamp ASC;
+            """
+        else:
+            self.logger.error(f"Unsupported interval: {interval}. Supported: 1s, 1m, 5m, 10m, 15m, 30m, 1h, 1d")
+            return []
 
         try:
             with self.connection.cursor() as cursor:
@@ -618,224 +513,7 @@ class DatabaseConnection():
         except Exception as e:
             self.logger.error(f"Error retrieving stock quote data: {e}")
             raise e
-    def get_crypto_data(self, coin: str, resolution: str = "daily"):
-        """
-        Retrieve crypto OHLCV data for a specified coin and time resolution
-        from a single table: crypto.{coin}.
 
-        The table crypto.{coin} is assumed to contain minute-level data.
-        We aggregate it for hourly, daily, weekly, monthly using date_trunc().
-        """
-
-        if resolution == "minute":
-            # Pull raw minute data from crypto.{coin}
-            self.logger.info(f"Retrieving MINUTE data for coin: {coin}")
-            query = f"""
-                SELECT ts, open, high, low, close, volume
-                FROM crypto.{coin}
-                ORDER BY ts ASC;
-            """
-        
-        elif resolution == "5m":
-            self.logger.info(f"Retrieving 5-MINUTE data for coin: {coin}")
-            query = f"""
-                WITH bars AS (
-                    SELECT DISTINCT ON (
-                        date_trunc('minute', ts)
-                        - ((EXTRACT(MINUTE FROM ts)::int %% 5) * INTERVAL '1 minute')
-                    )
-                    --  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                    --  This entire expression must match what appears in ORDER BY below
-
-                        date_trunc('minute', ts)
-                        - ((EXTRACT(MINUTE FROM ts)::int %% 5) * INTERVAL '1 minute')
-                        AS bar_time,
-                        open,
-                        high,
-                        low,
-                        close,
-                        volume
-                    FROM crypto.{coin}
-                    ORDER BY
-                        -- First sort key must be the same expression used in DISTINCT ON
-                        date_trunc('minute', ts)
-                        - ((EXTRACT(MINUTE FROM ts)::int %% 5) * INTERVAL '1 minute'),
-                        ts
-                )
-                SELECT *
-                FROM bars
-                ORDER BY bar_time;
-                """
-
-        elif resolution == "10m":
-            self.logger.info(f"Retrieving 10-MINUTE data for coin: {coin}")
-            query = f"""
-                WITH bars AS (
-                    SELECT DISTINCT ON (
-                        date_trunc('minute', ts)
-                        - ((EXTRACT(MINUTE FROM ts)::int %% 10) * INTERVAL '1 minute')
-                    )
-                    date_trunc('minute', ts)
-                    - ((EXTRACT(MINUTE FROM ts)::int %% 10) * INTERVAL '1 minute') AS bar_time,
-                    open,
-                    high,
-                    low,
-                    close,
-                    volume
-                    FROM crypto.{coin}
-                    ORDER BY
-                        date_trunc('minute', ts)
-                        - ((EXTRACT(MINUTE FROM ts)::int %% 10) * INTERVAL '1 minute'),
-                        ts
-                )
-                SELECT *
-                FROM bars
-                ORDER BY bar_time;
-            """
-
-        elif resolution == "15m":
-            self.logger.info(f"Retrieving 15-MINUTE data for coin: {coin}")
-            query = f"""
-                WITH bars AS (
-                    SELECT DISTINCT ON (
-                        date_trunc('minute', ts)
-                        - ((EXTRACT(MINUTE FROM ts)::int %% 15) * INTERVAL '1 minute')
-                    )
-                    date_trunc('minute', ts)
-                    - ((EXTRACT(MINUTE FROM ts)::int %% 15) * INTERVAL '1 minute') AS bar_time,
-                    open,
-                    high,
-                    low,
-                    close,
-                    volume
-                    FROM crypto.{coin}
-                    ORDER BY
-                        date_trunc('minute', ts)
-                        - ((EXTRACT(MINUTE FROM ts)::int %% 15) * INTERVAL '1 minute'),
-                        ts
-                )
-                SELECT *
-                FROM bars
-                ORDER BY bar_time;
-            """
-
-        elif resolution == "30m":
-            self.logger.info(f"Retrieving 30-MINUTE data for coin: {coin}")
-            query = f"""
-                WITH bars AS (
-                    SELECT DISTINCT ON (
-                        date_trunc('minute', ts)
-                        - ((EXTRACT(MINUTE FROM ts)::int %% 30) * INTERVAL '1 minute')
-                    )
-                    date_trunc('minute', ts)
-                    - ((EXTRACT(MINUTE FROM ts)::int %% 30) * INTERVAL '1 minute') AS bar_time,
-                    open,
-                    high,
-                    low,
-                    close,
-                    volume
-                    FROM crypto.{coin}
-                    ORDER BY
-                        date_trunc('minute', ts)
-                        - ((EXTRACT(MINUTE FROM ts)::int %% 30) * INTERVAL '1 minute'),
-                        ts
-                )
-                SELECT *
-                FROM bars
-                ORDER BY bar_time;
-            """
-
-        elif resolution == "hourly":
-            self.logger.info(f"Retrieving HOURLY data for coin: {coin}")
-            query = f"""
-                WITH hourly_bars AS (
-                    SELECT DISTINCT ON (date_trunc('hour', ts))
-                        date_trunc('hour', ts) AS hour_time,
-                        open,
-                        high,
-                        low,
-                        close,
-                        volume
-                    FROM crypto.{coin}
-                    ORDER BY date_trunc('hour', ts), ts ASC
-                )
-                SELECT *
-                FROM hourly_bars
-                ORDER BY hour_time;
-            """
-
-        elif resolution == "daily":
-            self.logger.info(f"Retrieving DAILY data for coin: {coin}")
-            query = f"""
-                WITH daily_bars AS (
-                    SELECT DISTINCT ON (date_trunc('day', ts))
-                        date_trunc('day', ts) AS day_time,
-                        open,
-                        high,
-                        low,
-                        close,
-                        volume
-                    FROM crypto.{coin}
-                    ORDER BY date_trunc('day', ts), ts ASC
-                )
-                SELECT *
-                FROM daily_bars
-                ORDER BY day_time;
-            """
-
-        elif resolution == "weekly":
-            self.logger.info(f"Retrieving WEEKLY data for coin: {coin}")
-            query = f"""
-                WITH weekly_bars AS (
-                    SELECT DISTINCT ON (date_trunc('week', ts))
-                        date_trunc('week', ts) AS week_time,
-                        open,
-                        high,
-                        low,
-                        close,
-                        volume
-                    FROM crypto.{coin}
-                    ORDER BY date_trunc('week', ts), ts ASC
-                )
-                SELECT *
-                FROM weekly_bars
-                ORDER BY week_time;
-            """
-
-        elif resolution == "monthly":
-            self.logger.info(f"Retrieving MONTHLY data for coin: {coin}")
-            query = f"""
-                WITH monthly_bars AS (
-                    SELECT DISTINCT ON (date_trunc('month', ts))
-                        date_trunc('month', ts) AS month_time,
-                        open,
-                        high,
-                        low,
-                        close,
-                        volume
-                    FROM crypto.{coin}
-                    ORDER BY date_trunc('month', ts), ts ASC
-                )
-                SELECT *
-                FROM monthly_bars
-                ORDER BY month_time;
-            """
-
-        else:
-            self.logger.error(f"Invalid resolution: {resolution}")
-            return []
-
-        try:
-            with self.connection.cursor() as cursor:
-                cursor.execute(query, (coin,))
-                rows = cursor.fetchall()
-                self.logger.info(
-                    f"Retrieved {len(rows)} rows for coin={coin} at resolution='{resolution}'"
-                )
-                return rows
-        except psycopg2.Error as e:
-            self.logger.error(f"Error retrieving crypto data: {e}")
-            raise e
 
     def get_option_symbol(self, option_symbol: str = None, start_time: str = None, end_time: str = None, resolution: str = "daily"):
         """
@@ -991,93 +669,3 @@ class DatabaseConnection():
         except Exception as e:
             self.logger.error(f"❌ Error fetching option chain: {e}")
             return pd.DataFrame()
-
-
-    def explore_contracts(self, ticker):
-        """
-        Diagnoses the contracts and quotes in the DB for a given ticker.
-        Allows interactive filtering to refine exploration.
-        """
-        import pandas as pd
-
-        try:
-            with self.connection.cursor() as cursor:
-                # Step 1: Get Ticker ID
-                cursor.execute("SELECT id FROM public.tickers WHERE ticker = %s", (ticker,))
-                result = cursor.fetchone()
-                if not result:
-                    self.logger.error(f"❌ Ticker '{ticker}' not found.")
-                    return []
-                ticker_id = result[0]
-
-                # Step 2: Fetch contract metadata
-                cursor.execute("""
-                    SELECT id, expiration, strike, side
-                    FROM options.contracts
-                    WHERE ticker_id = %s
-                    ORDER BY expiration, strike
-                """, (ticker_id,))
-                contracts = cursor.fetchall()
-
-                if not contracts:
-                    self.logger.warning(f"⚠️ No contracts found for ticker '{ticker}'")
-                    return []
-
-                df = pd.DataFrame(contracts, columns=['id', 'expiration', 'strike', 'side'])
-                df['expiration'] = pd.to_datetime(df['expiration'])
-
-                # Step 3: Log summary stats
-                total = len(df)
-                calls = (df['side'] == 'C').sum()
-                puts = (df['side'] == 'P').sum()
-                self.logger.info(f"🔍 Ticker: {ticker}")
-                self.logger.info(f"🧾 Total contracts: {total} | Calls: {calls} | Puts: {puts}")
-                self.logger.info(f"📆 Expiration range: {df['expiration'].min().date()} → {df['expiration'].max().date()}")
-                self.logger.info(f"💰 Strike range: {df['strike'].min()} → {df['strike'].max()}")
-
-                print("\n🎯 Sample of grouped contracts:\n")
-                grouped = df.groupby(['expiration', 'side'])['strike'].apply(list).reset_index()
-                print(grouped.to_string(index=False))
-
-                # Step 4: User chooses filter
-                print("\n💡 Now define your filter criteria.\n")
-                start_exp = pd.to_datetime(input("Start expiration (YYYY-MM-DD): "))
-                end_exp = pd.to_datetime(input("End expiration (YYYY-MM-DD): "))
-                strike_min = float(input("Min strike: "))
-                strike_max = float(input("Max strike: "))
-                side = input("Side (C/P/both): ").upper()
-
-                filtered = df[
-                    (df['expiration'] >= start_exp) &
-                    (df['expiration'] <= end_exp) &
-                    (df['strike'] >= strike_min) &
-                    (df['strike'] <= strike_max)
-                ]
-
-                if side in ['C', 'P']:
-                    filtered = filtered[filtered['side'] == side]
-
-                selected_contract_ids = filtered['id'].tolist()
-
-                self.logger.info(f"✅ Filtered contracts: {len(selected_contract_ids)}")
-
-                # Step 5: Get quote stats for those contracts
-                cursor.execute(f"""
-                    SELECT contract_id, COUNT(*), MIN(time), MAX(time)
-                    FROM options.quotes
-                    WHERE contract_id = ANY(%s)
-                    GROUP BY contract_id
-                    ORDER BY COUNT(*) DESC
-                """, (selected_contract_ids,))
-                quote_stats = cursor.fetchall()
-                print("\n📊 Quote stats per contract_id:")
-                for cid, count, min_t, max_t in quote_stats:
-                    print(f"  🧩 ID {cid}: {count} rows from {min_t} → {max_t}")
-
-                return selected_contract_ids
-
-        except Exception as e:
-            self.logger.error(f"❌ Error exploring contracts for {ticker}: {e}")
-            return []
-
-    

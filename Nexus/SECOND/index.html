@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Nexus Workspace</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+  <!-- Build the BINARY (main.rs) so main() runs; otherwise Trunk may build the lib and nothing mounts -->
+  <link data-trunk rel="rust" data-wasm-opt="z" data-bin="nexus-workspace"/>
+  <link data-trunk rel="css" href="style.css"/>
+</head>
+<body>
+  <div id="app-loading">
+    <p>Loading Nexus…</p>
+    <p class="loading-hint">If this stays, WASM did not start. Check console (F12).</p>
+  </div>
+  <script>
+    console.log('[nexus] HTML loaded');
+  </script>
+</body>
+</html>

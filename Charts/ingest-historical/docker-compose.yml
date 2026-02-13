@@ -1,0 +1,12 @@
+services:
+  historical-quotes:
+    image: thales884/ingest-historical-stock:latest 
+    container_name: historical-quotes
+    restart: always
+    env_file: ../.env
+    environment:
+      USE_PRODUCTION_SERVER: "true"
+    volumes:
+      - ../.env:/app/.env
+    ports:
+      - "8083:8080"

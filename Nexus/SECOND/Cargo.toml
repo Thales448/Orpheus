@@ -1,0 +1,23 @@
+[package]
+name = "nexus-workspace"
+version = "0.1.0"
+edition = "2021"
+authors = ["Nexus"]
+description = "Modular analytics workspace builder for financial analysis"
+
+[dependencies]
+leptos = { version = "0.6", features = ["csr"] }
+leptos_meta = "0.6"
+leptos_router = { version = "0.6", features = ["csr"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+gloo-console = "0.2"
+web-sys = { version = "0.3", features = ["Window", "Document", "Element", "EventTarget", "MouseEvent"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+
+[package.metadata.trunk]
+assets = []

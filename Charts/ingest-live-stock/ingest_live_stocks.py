@@ -180,7 +180,7 @@ class LiveStockIngestService:
             logger.warning("TEST MODE ENABLED - Database inserts are DISABLED")
     
     def load_watchlist(self) -> List[str]:
-        """Load all tickers from public.alpha_list watchlist"""
+        """Load all tickers from public.tickers watchlist"""
         if self.test_mode:
             # Return test symbols
             return ['SPY', 'AAPL', 'QQQ']
@@ -196,15 +196,14 @@ class LiveStockIngestService:
         try:
             with self.db.connection.cursor() as cursor:
                 query = """
-                    SELECT DISTINCT t.ticker
-                    FROM public.alpha_list w
-                    JOIN public.tickers t ON w.ticker_id = t.id
-                    ORDER BY t.ticker
+                    SELECT DISTINCT ticker
+                    FROM public.tickers 
+                    ORDER BY ticker
                 """
                 cursor.execute(query)
                 results = cursor.fetchall()
                 tickers = [row[0].upper() for row in results if row[0]]
-                logger.info(f"Loaded {len(tickers)} tickers from public.alpha_list: {', '.join(tickers)}")
+                logger.info(f"Loaded {len(tickers)} tickers from public.tickers: {', '.join(tickers)}")
                 return tickers
         except Exception as e:
             logger.error(f"Failed to load watchlist from database: {e}", exc_info=True)

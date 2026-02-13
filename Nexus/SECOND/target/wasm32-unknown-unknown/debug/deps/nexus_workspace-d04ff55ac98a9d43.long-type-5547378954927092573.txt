@@ -1,0 +1,1 @@
+RoutePropsBuilder<_, fn(BacktestWorkspaceProps) -> impl leptos::IntoView {BacktestWorkspace}, &str, ((&str,), (fn(BacktestWorkspaceProps) -> impl leptos::IntoView {BacktestWorkspace},), (), (), (), (), ())>

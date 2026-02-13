@@ -1,0 +1,1 @@
+fn(RouteProps<_, fn(PortfolioWorkspaceProps) -> impl leptos::IntoView {PortfolioWorkspace}, &str>) -> impl leptos::IntoView {leptos_router::Route::<_, fn(PortfolioWorkspaceProps) -> impl leptos::IntoView {PortfolioWorkspace}, &str>}
