@@ -53,3 +53,313 @@
 2026-02-13 10:23:32,855 - __main__ - INFO - API: Processing all tickers with lookback=1d
 2026-02-13 10:23:32,864 - __main__ - INFO - Loaded 12 tickers from public.watchlist table
 2026-02-13 10:23:32,864 - __main__ - INFO - Tickers: AAPL, AMZN, AVGO, GLD, GOOGL, META, MSFT, NVDA, QQQ, SPX, SPY, XSP (12 total)
+2026-02-13 18:11:45,770 - __main__ - INFO - Starting historical stock ingestion service
+2026-02-13 18:11:45,796 - __main__ - INFO - Service initialized successfully
+2026-02-13 18:11:45,799 - __main__ - INFO - Scheduler started: Runs daily at 16:15 (lookback=1d)
+2026-02-13 18:11:45,800 - __main__ - INFO - API server thread started on 0.0.0.0:8080
+2026-02-13 18:11:45,800 - __main__ - INFO - Service started and running. Press Ctrl+C to stop.
+2026-02-13 18:11:45,824 - __main__ - INFO - Starting production WSGI server (waitress) on 0.0.0.0:8080
+2026-02-13 18:11:45,826 - waitress - INFO - Serving on http://0.0.0.0:8080
+2026-02-13 18:12:05,601 - __main__ - INFO - Received signal 2, initiating graceful shutdown...
+2026-02-13 18:12:05,601 - __main__ - INFO - Shutting down service...
+2026-02-13 18:12:05,602 - DatabaseConnection - INFO - Database connection closed.
+2026-02-13 18:12:05,602 - __main__ - INFO - Service shut down complete
+2026-02-13 18:12:05,602 - __main__ - INFO - Shutting down service...
+2026-02-13 18:12:05,602 - DatabaseConnection - INFO - Database connection closed.
+2026-02-13 18:12:05,602 - __main__ - INFO - Service shut down complete
+2026-02-13 18:12:11,186 - __main__ - INFO - Starting historical stock ingestion service
+2026-02-13 18:12:11,211 - __main__ - INFO - Service initialized successfully
+2026-02-13 18:12:11,213 - __main__ - INFO - Scheduler started: Runs daily at 16:15 (lookback=1d)
+2026-02-13 18:12:11,214 - __main__ - INFO - API server thread started on 0.0.0.0:8080
+2026-02-13 18:12:11,214 - __main__ - INFO - Service started and running. Press Ctrl+C to stop.
+2026-02-13 18:12:11,224 - __main__ - INFO - Starting production WSGI server (waitress) on 0.0.0.0:8080
+2026-02-13 18:12:11,226 - waitress - INFO - Serving on http://0.0.0.0:8080
+2026-02-13 18:12:47,026 - __main__ - INFO - Loaded 12 tickers from public.watchlist table
+2026-02-13 18:15:15,314 - __main__ - ERROR - API error processing all tickers: 400 Bad Request: The browser (or proxy) sent a request that this server could not understand.
+Traceback (most recent call last):
+  File "/home/r/Workspace/Orpheus/.venv/lib/python3.12/site-packages/werkzeug/wrappers/request.py", line 611, in get_json
+    rv = self.json_module.loads(data)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/r/Workspace/Orpheus/.venv/lib/python3.12/site-packages/flask/json/provider.py", line 187, in loads
+    return json.loads(s, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/r/Workspace/Orpheus/.venv/lib/python3.12/site-packages/flask/wrappers.py", line 214, in on_json_loading_failed
+    return super().on_json_loading_failed(e)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/r/Workspace/Orpheus/.venv/lib/python3.12/site-packages/werkzeug/wrappers/request.py", line 645, in on_json_loading_failed
+    raise BadRequest(f"Failed to decode JSON object: {e}")
+werkzeug.exceptions.BadRequest: 400 Bad Request: Failed to decode JSON object: Expecting value: line 1 column 1 (char 0)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/r/Workspace/Orpheus/Charts/stock-api.py", line 270, in process_all_api
+    data = request.get_json() or {}
+           ^^^^^^^^^^^^^^^^^^
+  File "/home/r/Workspace/Orpheus/.venv/lib/python3.12/site-packages/werkzeug/wrappers/request.py", line 620, in get_json
+    rv = self.on_json_loading_failed(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/r/Workspace/Orpheus/.venv/lib/python3.12/site-packages/flask/wrappers.py", line 219, in on_json_loading_failed
+    raise BadRequest() from ebr
+werkzeug.exceptions.BadRequest: 400 Bad Request: The browser (or proxy) sent a request that this server could not understand.
+2026-02-13 18:15:29,049 - __main__ - ERROR - API error processing all tickers: 400 Bad Request: The browser (or proxy) sent a request that this server could not understand.
+Traceback (most recent call last):
+  File "/home/r/Workspace/Orpheus/.venv/lib/python3.12/site-packages/werkzeug/wrappers/request.py", line 611, in get_json
+    rv = self.json_module.loads(data)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/r/Workspace/Orpheus/.venv/lib/python3.12/site-packages/flask/json/provider.py", line 187, in loads
+    return json.loads(s, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/r/Workspace/Orpheus/.venv/lib/python3.12/site-packages/flask/wrappers.py", line 214, in on_json_loading_failed
+    return super().on_json_loading_failed(e)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/r/Workspace/Orpheus/.venv/lib/python3.12/site-packages/werkzeug/wrappers/request.py", line 645, in on_json_loading_failed
+    raise BadRequest(f"Failed to decode JSON object: {e}")
+werkzeug.exceptions.BadRequest: 400 Bad Request: Failed to decode JSON object: Expecting value: line 1 column 1 (char 0)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/r/Workspace/Orpheus/Charts/stock-api.py", line 270, in process_all_api
+    data = request.get_json() or {}
+           ^^^^^^^^^^^^^^^^^^
+  File "/home/r/Workspace/Orpheus/.venv/lib/python3.12/site-packages/werkzeug/wrappers/request.py", line 620, in get_json
+    rv = self.on_json_loading_failed(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/r/Workspace/Orpheus/.venv/lib/python3.12/site-packages/flask/wrappers.py", line 219, in on_json_loading_failed
+    raise BadRequest() from ebr
+werkzeug.exceptions.BadRequest: 400 Bad Request: The browser (or proxy) sent a request that this server could not understand.
+2026-02-13 18:16:01,883 - __main__ - INFO - API: Processing all tickers with lookback=1d
+2026-02-13 18:16:01,884 - __main__ - INFO - Loaded 12 tickers from public.watchlist table
+2026-02-13 18:16:01,884 - __main__ - INFO - Tickers: AAPL, AMZN, AVGO, GLD, GOOGL, META, MSFT, NVDA, QQQ, SPX, SPY, XSP (12 total)
+2026-02-13 18:16:13,868 - __main__ - INFO - Status: AAPL: complete | AMZN: complete | AVGO: complete | GLD: complete | GOOGL: complete | META: complete | MSFT: complete | NVDA: complete | QQQ: complete | SPX: 2 missing (20260212, 20260213) | SPY: complete | XSP: 2 missing (20260212, 20260213)
+2026-02-13 18:16:13,868 - __main__ - INFO - Fetching 4 missing date(s)
+2026-02-13 18:16:13,927 - __main__ - INFO - Fetching SPX 2026-02-12 from API...
+2026-02-13 18:16:13,972 - __main__ - INFO - Fetching SPX 2026-02-13 from API...
+2026-02-13 18:16:17,227 - DataCollector - ERROR - Unexpected error fetching data for SPX on 20260212: [Errno 113] No route to host
+2026-02-13 18:16:17,228 - DataCollector - ERROR - Unexpected error fetching data for SPX on 20260213: [Errno 113] No route to host
+2026-02-13 18:16:17,228 - DataCollector - WARNING - No valid stock quote records were parsed for SPX.
+2026-02-13 18:16:17,228 - DataCollector - WARNING - No valid stock quote records were parsed for SPX.
+2026-02-13 18:16:17,228 - __main__ - WARNING - No data returned for SPX on 2026-02-12
+2026-02-13 18:16:17,229 - __main__ - WARNING - No data returned for SPX on 2026-02-13
+2026-02-13 18:16:17,269 - __main__ - INFO - Fetching XSP 2026-02-12 from API...
+2026-02-13 18:16:17,312 - __main__ - INFO - Fetching XSP 2026-02-13 from API...
+2026-02-13 18:16:20,493 - DataCollector - ERROR - Unexpected error fetching data for XSP on 20260212: [Errno 113] No route to host
+2026-02-13 18:16:20,494 - DataCollector - ERROR - Unexpected error fetching data for XSP on 20260213: [Errno 113] No route to host
+2026-02-13 18:16:20,495 - DataCollector - WARNING - No valid stock quote records were parsed for XSP.
+2026-02-13 18:16:20,495 - DataCollector - WARNING - No valid stock quote records were parsed for XSP.
+2026-02-13 18:16:20,495 - __main__ - WARNING - No data returned for XSP on 2026-02-12
+2026-02-13 18:16:20,495 - __main__ - WARNING - No data returned for XSP on 2026-02-13
+2026-02-13 18:16:20,496 - __main__ - INFO - Result: 0 fetched, 4 failed
+2026-02-13 18:17:00,196 - __main__ - ERROR - API error processing all tickers: 400 Bad Request: The browser (or proxy) sent a request that this server could not understand.
+Traceback (most recent call last):
+  File "/home/r/Workspace/Orpheus/.venv/lib/python3.12/site-packages/werkzeug/wrappers/request.py", line 611, in get_json
+    rv = self.json_module.loads(data)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/r/Workspace/Orpheus/.venv/lib/python3.12/site-packages/flask/json/provider.py", line 187, in loads
+    return json.loads(s, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/decoder.py", line 353, in raw_decode
+    obj, end = self.scan_once(s, idx)
+               ^^^^^^^^^^^^^^^^^^^^^^
+json.decoder.JSONDecodeError: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/r/Workspace/Orpheus/.venv/lib/python3.12/site-packages/flask/wrappers.py", line 214, in on_json_loading_failed
+    return super().on_json_loading_failed(e)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/r/Workspace/Orpheus/.venv/lib/python3.12/site-packages/werkzeug/wrappers/request.py", line 645, in on_json_loading_failed
+    raise BadRequest(f"Failed to decode JSON object: {e}")
+werkzeug.exceptions.BadRequest: 400 Bad Request: Failed to decode JSON object: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/r/Workspace/Orpheus/Charts/stock-api.py", line 270, in process_all_api
+    data = request.get_json() or {}
+           ^^^^^^^^^^^^^^^^^^
+  File "/home/r/Workspace/Orpheus/.venv/lib/python3.12/site-packages/werkzeug/wrappers/request.py", line 620, in get_json
+    rv = self.on_json_loading_failed(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/r/Workspace/Orpheus/.venv/lib/python3.12/site-packages/flask/wrappers.py", line 219, in on_json_loading_failed
+    raise BadRequest() from ebr
+werkzeug.exceptions.BadRequest: 400 Bad Request: The browser (or proxy) sent a request that this server could not understand.
+2026-02-13 18:17:24,980 - __main__ - INFO - API: Processing all tickers with lookback=1d
+2026-02-13 18:17:24,982 - __main__ - INFO - Loaded 12 tickers from public.watchlist table
+2026-02-13 18:17:24,982 - __main__ - INFO - Tickers: AAPL, AMZN, AVGO, GLD, GOOGL, META, MSFT, NVDA, QQQ, SPX, SPY, XSP (12 total)
+2026-02-13 18:17:36,261 - __main__ - INFO - Status: AAPL: complete | AMZN: complete | AVGO: complete | GLD: complete | GOOGL: complete | META: complete | MSFT: complete | NVDA: complete | QQQ: complete | SPX: 2 missing (20260212, 20260213) | SPY: complete | XSP: 2 missing (20260212, 20260213)
+2026-02-13 18:17:36,261 - __main__ - INFO - Fetching 4 missing date(s)
+2026-02-13 18:17:36,303 - __main__ - INFO - Fetching SPX 2026-02-12 from API...
+2026-02-13 18:17:36,337 - __main__ - INFO - Fetching SPX 2026-02-13 from API...
+2026-02-13 18:17:39,467 - DataCollector - ERROR - Unexpected error fetching data for SPX on 20260213: [Errno 113] No route to host
+2026-02-13 18:17:39,467 - DataCollector - ERROR - Unexpected error fetching data for SPX on 20260212: [Errno 113] No route to host
+2026-02-13 18:17:39,468 - DataCollector - WARNING - No valid stock quote records were parsed for SPX.
+2026-02-13 18:17:39,468 - DataCollector - WARNING - No valid stock quote records were parsed for SPX.
+2026-02-13 18:17:39,468 - __main__ - WARNING - No data returned for SPX on 2026-02-13
+2026-02-13 18:17:39,468 - __main__ - WARNING - No data returned for SPX on 2026-02-12
+2026-02-13 18:17:39,509 - __main__ - INFO - Fetching XSP 2026-02-12 from API...
+2026-02-13 18:17:39,538 - __main__ - INFO - Fetching XSP 2026-02-13 from API...
+2026-02-13 18:17:42,667 - DataCollector - ERROR - Unexpected error fetching data for XSP on 20260213: [Errno 113] No route to host
+2026-02-13 18:17:42,670 - DataCollector - ERROR - Unexpected error fetching data for XSP on 20260212: [Errno 113] No route to host
+2026-02-13 18:17:42,671 - DataCollector - WARNING - No valid stock quote records were parsed for XSP.
+2026-02-13 18:17:42,671 - DataCollector - WARNING - No valid stock quote records were parsed for XSP.
+2026-02-13 18:17:42,671 - __main__ - WARNING - No data returned for XSP on 2026-02-13
+2026-02-13 18:17:42,672 - __main__ - WARNING - No data returned for XSP on 2026-02-12
+2026-02-13 18:17:42,672 - __main__ - INFO - Result: 0 fetched, 4 failed
+2026-02-13 18:47:51,218 - __main__ - INFO - Received signal 2, initiating graceful shutdown...
+2026-02-13 18:47:51,218 - __main__ - INFO - Shutting down service...
+2026-02-13 18:47:51,219 - DatabaseConnection - INFO - Database connection closed.
+2026-02-13 18:47:51,219 - __main__ - INFO - Service shut down complete
+2026-02-13 18:47:51,219 - __main__ - INFO - Shutting down service...
+2026-02-13 18:47:51,219 - DatabaseConnection - INFO - Database connection closed.
+2026-02-13 18:47:51,219 - __main__ - INFO - Service shut down complete
+2026-02-13 19:04:55,553 - __main__ - INFO - Starting historical stock ingestion service
+2026-02-13 19:04:55,559 - __main__ - ERROR - Failed to initialize service: name 'DatabaseConnection' is not defined
+Traceback (most recent call last):
+  File "/home/r/Workspace/Orpheus/Charts/stock-api.py", line 353, in initialize
+    self.db = DatabaseConnection()
+              ^^^^^^^^^^^^^^^^^^
+NameError: name 'DatabaseConnection' is not defined
+2026-02-13 19:05:58,749 - __main__ - INFO - Starting historical stock ingestion service
+2026-02-13 19:05:58,775 - __main__ - ERROR - Failed to initialize service: name 'DataCollector' is not defined
+Traceback (most recent call last):
+  File "/home/r/Workspace/Orpheus/Charts/stock-api.py", line 354, in initialize
+    self.datacollector = DataCollector(self.db)
+                         ^^^^^^^^^^^^^
+NameError: name 'DataCollector' is not defined
+2026-02-13 19:06:05,664 - __main__ - INFO - Starting historical stock ingestion service
+2026-02-13 19:06:05,691 - __main__ - INFO - Service initialized successfully
+2026-02-13 19:06:05,693 - __main__ - INFO - Scheduler started: Runs daily at 16:15 (lookback=1d)
+2026-02-13 19:06:05,694 - __main__ - INFO - API server thread started on 0.0.0.0:8080
+2026-02-13 19:06:05,694 - __main__ - INFO - Service started and running. Press Ctrl+C to stop.
+2026-02-13 19:06:05,704 - __main__ - INFO - Starting production WSGI server (waitress) on 0.0.0.0:8080
+2026-02-13 19:06:05,706 - waitress - INFO - Serving on http://0.0.0.0:8080
+2026-02-13 19:06:21,660 - __main__ - INFO - API: Processing all tickers with lookback=1d
+2026-02-13 19:06:21,670 - __main__ - INFO - Loaded 12 tickers from public.watchlist table
+2026-02-13 19:06:21,670 - __main__ - INFO - Tickers: AAPL, AMZN, AVGO, GLD, GOOGL, META, MSFT, NVDA, QQQ, SPX, SPY, XSP (12 total)
+2026-02-13 19:06:33,410 - __main__ - INFO - Status: AAPL: complete | AMZN: complete | AVGO: complete | GLD: complete | GOOGL: complete | META: complete | MSFT: complete | NVDA: complete | QQQ: complete | SPX: 2 missing (20260212, 20260213) | SPY: complete | XSP: 2 missing (20260212, 20260213)
+2026-02-13 19:06:33,411 - __main__ - INFO - Fetching 4 missing date(s)
+2026-02-13 19:06:33,453 - __main__ - INFO - Fetching SPX 2026-02-12 from API...
+2026-02-13 19:06:33,454 - __main__ - ERROR - Error fetching/inserting SPX 20260212: 'DataCollector' object has no attribute 'theta_stocks_quote'
+Traceback (most recent call last):
+  File "/home/r/Workspace/Orpheus/Charts/stock-api.py", line 500, in fetch_and_insert_data
+    data = self.datacollector.theta_stocks_quote(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'DataCollector' object has no attribute 'theta_stocks_quote'. Did you mean: 'theta_options_quotes'?
+2026-02-13 19:06:33,490 - __main__ - INFO - Fetching SPX 2026-02-13 from API...
+2026-02-13 19:06:33,490 - __main__ - ERROR - Error fetching/inserting SPX 20260213: 'DataCollector' object has no attribute 'theta_stocks_quote'
+Traceback (most recent call last):
+  File "/home/r/Workspace/Orpheus/Charts/stock-api.py", line 500, in fetch_and_insert_data
+    data = self.datacollector.theta_stocks_quote(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'DataCollector' object has no attribute 'theta_stocks_quote'. Did you mean: 'theta_options_quotes'?
+2026-02-13 19:06:33,528 - __main__ - INFO - Fetching XSP 2026-02-13 from API...
+2026-02-13 19:06:33,528 - __main__ - ERROR - Error fetching/inserting XSP 20260213: 'DataCollector' object has no attribute 'theta_stocks_quote'
+Traceback (most recent call last):
+  File "/home/r/Workspace/Orpheus/Charts/stock-api.py", line 500, in fetch_and_insert_data
+    data = self.datacollector.theta_stocks_quote(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'DataCollector' object has no attribute 'theta_stocks_quote'. Did you mean: 'theta_options_quotes'?
+2026-02-13 19:06:33,563 - __main__ - INFO - Fetching XSP 2026-02-12 from API...
+2026-02-13 19:06:33,563 - __main__ - ERROR - Error fetching/inserting XSP 20260212: 'DataCollector' object has no attribute 'theta_stocks_quote'
+Traceback (most recent call last):
+  File "/home/r/Workspace/Orpheus/Charts/stock-api.py", line 500, in fetch_and_insert_data
+    data = self.datacollector.theta_stocks_quote(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'DataCollector' object has no attribute 'theta_stocks_quote'. Did you mean: 'theta_options_quotes'?
+2026-02-13 19:06:33,565 - __main__ - INFO - Result: 0 fetched, 4 failed
+2026-02-13 19:07:14,172 - __main__ - INFO - Received signal 2, initiating graceful shutdown...
+2026-02-13 19:07:14,172 - __main__ - INFO - Shutting down service...
+2026-02-13 19:07:14,173 - DatabaseConnection - INFO - Database connection closed.
+2026-02-13 19:07:14,174 - __main__ - INFO - Service shut down complete
+2026-02-13 19:07:14,174 - __main__ - INFO - Shutting down service...
+2026-02-13 19:07:14,174 - DatabaseConnection - INFO - Database connection closed.
+2026-02-13 19:07:14,174 - __main__ - INFO - Service shut down complete
+2026-02-13 19:07:16,657 - __main__ - INFO - Starting historical stock ingestion service
+2026-02-13 19:07:16,682 - __main__ - INFO - Service initialized successfully
+2026-02-13 19:07:16,684 - __main__ - INFO - Scheduler started: Runs daily at 16:15 (lookback=1d)
+2026-02-13 19:07:16,685 - __main__ - INFO - API server thread started on 0.0.0.0:8080
+2026-02-13 19:07:16,686 - __main__ - INFO - Service started and running. Press Ctrl+C to stop.
+2026-02-13 19:07:16,696 - __main__ - INFO - Starting production WSGI server (waitress) on 0.0.0.0:8080
+2026-02-13 19:07:16,698 - waitress - INFO - Serving on http://0.0.0.0:8080
+2026-02-13 19:07:18,623 - __main__ - INFO - API: Processing all tickers with lookback=1d
+2026-02-13 19:07:18,630 - __main__ - INFO - Loaded 12 tickers from public.watchlist table
+2026-02-13 19:07:18,630 - __main__ - INFO - Tickers: AAPL, AMZN, AVGO, GLD, GOOGL, META, MSFT, NVDA, QQQ, SPX, SPY, XSP (12 total)
+2026-02-13 19:07:30,213 - __main__ - INFO - Status: AAPL: complete | AMZN: complete | AVGO: complete | GLD: complete | GOOGL: complete | META: complete | MSFT: complete | NVDA: complete | QQQ: complete | SPX: 2 missing (20260212, 20260213) | SPY: complete | XSP: 2 missing (20260212, 20260213)
+2026-02-13 19:07:30,214 - __main__ - INFO - Fetching 4 missing date(s)
+2026-02-13 19:07:30,256 - __main__ - INFO - Fetching SPX 2026-02-12 from API...
+2026-02-13 19:07:30,293 - __main__ - INFO - Fetching SPX 2026-02-13 from API...
+2026-02-13 19:07:30,677 - httpx - INFO - HTTP Request: GET http://192.168.1.92:25503/v3/stock/history/quote?symbol=SPX&date=20260212&interval=1s&start_time=09%3A30%3A00&end_time=16%3A00%3A00&venue=nqb&format=csv "HTTP/1.1 472 472"
+2026-02-13 19:07:30,678 - httpx - INFO - HTTP Request: GET http://192.168.1.92:25503/v3/stock/history/quote?symbol=SPX&date=20260213&interval=1s&start_time=09%3A30%3A00&end_time=16%3A00%3A00&venue=nqb&format=csv "HTTP/1.1 472 472"
+2026-02-13 19:07:30,678 - DataCollector - INFO - No data available for SPX on 20260212 (HTTP 472)
+2026-02-13 19:07:30,679 - DataCollector - INFO - No data available for SPX on 20260213 (HTTP 472)
+2026-02-13 19:07:30,679 - DataCollector - WARNING - No valid stock quote records were parsed for SPX.
+2026-02-13 19:07:30,679 - DataCollector - WARNING - No valid stock quote records were parsed for SPX.
+2026-02-13 19:07:30,679 - __main__ - WARNING - No data returned for SPX on 2026-02-12
+2026-02-13 19:07:30,680 - __main__ - WARNING - No data returned for SPX on 2026-02-13
+2026-02-13 19:07:30,718 - __main__ - INFO - Fetching XSP 2026-02-12 from API...
+2026-02-13 19:07:30,755 - __main__ - INFO - Fetching XSP 2026-02-13 from API...
+2026-02-13 19:07:30,876 - httpx - INFO - HTTP Request: GET http://192.168.1.92:25503/v3/stock/history/quote?symbol=XSP&date=20260213&interval=1s&start_time=09%3A30%3A00&end_time=16%3A00%3A00&venue=nqb&format=csv "HTTP/1.1 472 472"
+2026-02-13 19:07:30,876 - DataCollector - INFO - No data available for XSP on 20260213 (HTTP 472)
+2026-02-13 19:07:30,877 - DataCollector - WARNING - No valid stock quote records were parsed for XSP.
+2026-02-13 19:07:30,877 - __main__ - WARNING - No data returned for XSP on 2026-02-13
+2026-02-13 19:07:30,878 - httpx - INFO - HTTP Request: GET http://192.168.1.92:25503/v3/stock/history/quote?symbol=XSP&date=20260212&interval=1s&start_time=09%3A30%3A00&end_time=16%3A00%3A00&venue=nqb&format=csv "HTTP/1.1 472 472"
+2026-02-13 19:07:30,878 - DataCollector - INFO - No data available for XSP on 20260212 (HTTP 472)
+2026-02-13 19:07:30,878 - DataCollector - WARNING - No valid stock quote records were parsed for XSP.
+2026-02-13 19:07:30,879 - __main__ - WARNING - No data returned for XSP on 2026-02-12
+2026-02-13 19:07:30,879 - __main__ - INFO - Result: 0 fetched, 4 failed
+2026-02-13 19:08:06,260 - __main__ - INFO - Received signal 2, initiating graceful shutdown...
+2026-02-13 19:08:06,261 - __main__ - INFO - Shutting down service...
+2026-02-13 19:08:06,261 - DatabaseConnection - INFO - Database connection closed.
+2026-02-13 19:08:06,261 - __main__ - INFO - Service shut down complete
+2026-02-13 19:08:06,261 - __main__ - INFO - Shutting down service...
+2026-02-13 19:08:06,261 - DatabaseConnection - INFO - Database connection closed.
+2026-02-13 19:08:06,261 - __main__ - INFO - Service shut down complete
+2026-02-14 00:59:18,406 - __main__ - INFO - Starting historical stock ingestion service
+2026-02-14 00:59:18,432 - __main__ - INFO - Service initialized successfully
+2026-02-14 00:59:18,433 - __main__ - INFO - Scheduler started: Runs daily at 16:15 (lookback=1d)
+2026-02-14 00:59:18,434 - __main__ - INFO - API server thread started on 0.0.0.0:8080
+2026-02-14 00:59:18,435 - __main__ - INFO - Service started and running. Press Ctrl+C to stop.
+2026-02-14 00:59:18,445 - __main__ - INFO - Starting production WSGI server (waitress) on 0.0.0.0:8080
+2026-02-14 00:59:18,448 - waitress - INFO - Serving on http://0.0.0.0:8080
+2026-02-14 00:59:26,028 - __main__ - INFO - Received signal 2, initiating graceful shutdown...
+2026-02-14 00:59:26,028 - __main__ - INFO - Shutting down service...
+2026-02-14 00:59:26,028 - DatabaseConnection - INFO - Database connection closed.
+2026-02-14 00:59:26,028 - __main__ - INFO - Service shut down complete
+2026-02-14 00:59:26,029 - __main__ - INFO - Shutting down service...
+2026-02-14 00:59:26,029 - DatabaseConnection - INFO - Database connection closed.
+2026-02-14 00:59:26,029 - __main__ - INFO - Service shut down complete

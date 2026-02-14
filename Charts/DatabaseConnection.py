@@ -52,57 +52,11 @@ class DatabaseConnection():
         except Exception as e:
             self.logger.error(f"Error closing the database connection {e}")
      
-    def insert_option_ohlc(self, data, theta=False):
-        if theta:
-            insert_query = """
-            INSERT INTO options.ohlc (
-                time, contract_id,
-                ms_of_day, open, high, low, close,
-                volume, count, date
-            ) VALUES %s
-            ON CONFLICT (contract_id, time)
-            DO NOTHING
-        """
-        else:
-            insert_query = """
-                INSERT INTO options.realtime (
-                    underlying, symbol, description, strike, bid, ask, volume, option_type,
-                    expiry_date, last_volume, delta, gamma, theta, vega, rho, mid_iv, time
-                ) VALUES %s
-                ON CONFLICT (symbol) 
-                DO UPDATE SET
-                    underlying = EXCLUDED.underlying,
-                    description = EXCLUDED.description,
-                    strike = EXCLUDED.strike,
-                    bid = EXCLUDED.bid,
-                    ask = EXCLUDED.ask,
-                    volume = EXCLUDED.volume,
-                    option_type = EXCLUDED.option_type,
-                    expiry_date = EXCLUDED.expiry_date,
-                    last_volume = EXCLUDED.last_volume,
-                    delta = EXCLUDED.delta,
-                    gamma = EXCLUDED.gamma,
-                    theta = EXCLUDED.theta,
-                    vega = EXCLUDED.vega,
-                    rho = EXCLUDED.rho,
-                    mid_iv = EXCLUDED.mid_iv,
-                    time = EXCLUDED.time;
-            """
-        try:
-            with self.connection.cursor() as cursor:
-                extras.execute_values(cursor, insert_query, data)
-                self.connection.commit()
-                
-                #self.logger.info("Data insert into options_minute_ohlc successful.")
-        except psycopg2.Error as e:
-            self.connection.rollback()
-            self.logger.error(f"Error inserting option data: {e}")
-            raise e
-
+    
     def insert_option_quotes(self, quotes):
         """
         Inserts a batch of option quote tuples into options.quotes.
-        Each quote is a tuple: (contract_id, time, bid, bid_size, bid_ex, bid_cond, ask, ask_size, ask_ex, ask_cond)
+        Each quote is a tuple: (time, contract_id, bid, bid_size, bid_exchange, bid_condition, ask, ask_size, ask_exchange, ask_condition)
         """
         if not quotes:
             return
@@ -118,9 +72,8 @@ class DatabaseConnection():
 
         try:
             with self.connection.cursor() as cursor:
-                extras.execute_values(cursor, insert_query, quotes, page_size=500)
+                extras.execute_values(cursor, insert_query, quotes, page_size=10000)
                 self.connection.commit()
-                self.logger.info(f"✅ Inserted {len(quotes)} quote rows into options.quotes")
         except psycopg2.Error as e:
             self.connection.rollback()
             self.logger.error(f"❌ Error inserting option quotes: {e}")
@@ -143,7 +96,241 @@ class DatabaseConnection():
         except psycopg2.Error as e:
             self.connection.rollback()
             self.logger.error(f"Error inserting expiration dates for ticker ID {sid}: {e}")
-  
+
+    def insert_option_quote_dates(self, ticker_id: int, expiration: int, quote_dates: list):
+        """Insert (ticker_id, expiration, quote_date) into options.quote_dates. quote_dates are YYYYMMDD integers."""
+        if not quote_dates:
+            return
+        insert_query = """
+        INSERT INTO options.quote_dates (ticker_id, expiration, quote_date)
+        VALUES %s
+        ON CONFLICT (ticker_id, expiration, quote_date) DO NOTHING
+        """
+        try:
+            data = [(ticker_id, expiration, d) for d in quote_dates]
+            with self.connection.cursor() as cursor:
+                extras.execute_values(cursor, insert_query, data)
+                self.connection.commit()
+                self.logger.info(f"Inserted {len(data)} quote_dates for ticker_id={ticker_id} expiration={expiration}")
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            self.logger.error(f"Error inserting option quote_dates: {e}")
+
+    def insert_option_strikes(self, ticker_id: int, expiration: int, strikes: list):
+        """Insert (ticker_id, expiration, strike) into options.strikes. strikes are numeric."""
+        if not strikes:
+            return
+        insert_query = """
+        INSERT INTO options.strikes (ticker_id, expiration, strike)
+        VALUES %s
+        ON CONFLICT (ticker_id, expiration, strike) DO NOTHING
+        """
+        try:
+            data = [(ticker_id, expiration, float(s)) for s in strikes]
+            with self.connection.cursor() as cursor:
+                extras.execute_values(cursor, insert_query, data)
+                self.connection.commit()
+                self.logger.info("Inserted %s strikes for ticker_id=%s expiration=%s", len(data), ticker_id, expiration)
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            self.logger.error("Error inserting option strikes: %s", e)
+
+    def get_option_quote_dates_for_ticker_in_range(
+        self, ticker_id: int, start_yyyymmdd: int, end_yyyymmdd: int
+    ) -> set:
+        """
+        Return set of quote_date (YYYYMMDD int) present in options.quote_dates
+        for the given ticker_id and quote_date in [start_yyyymmdd, end_yyyymmdd].
+        quote_date in DB is INTEGER; normalize to int for consistent comparison with requested_dates.
+        """
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT DISTINCT quote_date
+                    FROM options.quote_dates
+                    WHERE ticker_id = %s AND quote_date >= %s AND quote_date <= %s
+                    """,
+                    (ticker_id, start_yyyymmdd, end_yyyymmdd),
+                )
+                return {int(row[0]) for row in cursor.fetchall()}
+        except Exception as e:
+            self.logger.error("Error getting option quote_dates in range: %s", e)
+            return set()
+
+    def fetch_option_expirations(
+        self, ticker_id: int, expiration_min: int = None, expiration_max: int = None
+    ) -> list:
+        """Fetch expirations from options.expirations for a ticker, optional date range (YYYYMMDD)."""
+        try:
+            with self.connection.cursor() as cursor:
+                sql = "SELECT expiration FROM options.expirations WHERE ticker_id = %s"
+                params = [ticker_id]
+                if expiration_min is not None:
+                    sql += " AND expiration >= %s"
+                    params.append(expiration_min)
+                if expiration_max is not None:
+                    sql += " AND expiration <= %s"
+                    params.append(expiration_max)
+                sql += " ORDER BY expiration"
+                cursor.execute(sql, params)
+                return [int(row[0]) for row in cursor.fetchall()]
+        except Exception as e:
+            self.logger.error("Error fetching option expirations: %s", e)
+            return []
+
+    def fetch_option_contracts(
+        self,
+        ticker_id: int,
+        expiration_min: int = None,
+        expiration_max: int = None,
+        side: str = None,
+    ) -> list:
+        """Fetch contracts from options.contracts for a ticker. Optional: expiration range (YYYYMMDD), side ('call' or 'put')."""
+        try:
+            with self.connection.cursor() as cursor:
+                sql = """
+                    SELECT id, ticker_id, expiration, strike, side
+                    FROM options.contracts
+                    WHERE ticker_id = %s
+                """
+                params = [ticker_id]
+                if expiration_min is not None:
+                    sql += " AND expiration >= %s"
+                    params.append(expiration_min)
+                if expiration_max is not None:
+                    sql += " AND expiration <= %s"
+                    params.append(expiration_max)
+                if side is not None and str(side).lower() in ("call", "put"):
+                    sql += " AND side = %s"
+                    params.append(str(side).lower())
+                sql += " ORDER BY expiration, strike, side"
+                cursor.execute(sql, params)
+                return [
+                    {"id": r[0], "ticker_id": r[1], "expiration": r[2], "strike": float(r[3]), "side": r[4]}
+                    for r in cursor.fetchall()
+                ]
+        except Exception as e:
+            self.logger.error("Error fetching option contracts: %s", e)
+            return []
+
+    def fetch_option_strikes(
+        self, ticker_id: int, expiration_min: int = None, expiration_max: int = None
+    ) -> list:
+        """Fetch strikes from options.strikes for a ticker, optional expiration range (YYYYMMDD)."""
+        try:
+            with self.connection.cursor() as cursor:
+                sql = """
+                    SELECT ticker_id, expiration, strike
+                    FROM options.strikes
+                    WHERE ticker_id = %s
+                """
+                params = [ticker_id]
+                if expiration_min is not None:
+                    sql += " AND expiration >= %s"
+                    params.append(expiration_min)
+                if expiration_max is not None:
+                    sql += " AND expiration <= %s"
+                    params.append(expiration_max)
+                sql += " ORDER BY expiration, strike"
+                cursor.execute(sql, params)
+                return [
+                    {"ticker_id": r[0], "expiration": r[1], "strike": float(r[2])}
+                    for r in cursor.fetchall()
+                ]
+        except Exception as e:
+            self.logger.error("Error fetching option strikes: %s", e)
+            return []
+
+    def fetch_option_quotes(
+        self,
+        ticker_id: int,
+        expiration: int,
+        strike: float,
+        side: str,
+        date_yyyymmdd: int = None,
+        time_str: str = None,
+    ) -> tuple:
+        """
+        Fetch option quotes from options.quotes for one contract (ticker_id, expiration, strike, side).
+        date_yyyymmdd: optional YYYYMMDD; if None, use today (server date).
+        time_str: optional "HH:MM" or "HH:MM:SS"; if None, return all quotes for the date.
+        Returns (quotes_list, contract_id or None). If contract_id is None, contract was not found.
+        quotes_list: list of dicts with time, bid, bid_size, ..., ask_condition.
+        """
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT id FROM options.contracts
+                    WHERE ticker_id = %s AND expiration = %s AND strike = %s AND side = %s
+                    """,
+                    (ticker_id, expiration, strike, side.lower()),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    return [], None
+                contract_id = row[0]
+                if date_yyyymmdd is None:
+                    from datetime import date as date_type
+                    date_yyyymmdd = int(date_type.today().strftime("%Y%m%d"))
+                # Use (time AT TIME ZONE 'UTC')::date so calendar date matches regardless of session TZ
+                date_cond = "(time AT TIME ZONE 'UTC')::date = TO_DATE(%s::text, 'YYYYMMDD')"
+                if time_str is not None and time_str.strip():
+                    t = time_str.strip()
+                    if len(t) == 5:
+                        time_pattern = t + ":%%"
+                        sql = """
+                            SELECT time, bid, bid_size, bid_exchange, bid_condition,
+                                   ask, ask_size, ask_exchange, ask_condition
+                            FROM options.quotes
+                            WHERE contract_id = %s
+                              AND """ + date_cond + """
+                              AND TO_CHAR(time AT TIME ZONE 'UTC', 'HH24:MI:SS') LIKE %s
+                            ORDER BY time
+                        """
+                        cursor.execute(sql, (contract_id, date_yyyymmdd, time_pattern))
+                    else:
+                        sql = """
+                            SELECT time, bid, bid_size, bid_exchange, bid_condition,
+                                   ask, ask_size, ask_exchange, ask_condition
+                            FROM options.quotes
+                            WHERE contract_id = %s
+                              AND """ + date_cond + """
+                              AND TO_CHAR(time AT TIME ZONE 'UTC', 'HH24:MI:SS') = %s
+                            ORDER BY time
+                        """
+                        cursor.execute(sql, (contract_id, date_yyyymmdd, t))
+                else:
+                    sql = """
+                        SELECT time, bid, bid_size, bid_exchange, bid_condition,
+                               ask, ask_size, ask_exchange, ask_condition
+                        FROM options.quotes
+                        WHERE contract_id = %s
+                          AND """ + date_cond + """
+                        ORDER BY time
+                    """
+                    cursor.execute(sql, (contract_id, date_yyyymmdd))
+                rows = cursor.fetchall()
+                quotes = [
+                    {
+                        "time": r[0].isoformat() if hasattr(r[0], "isoformat") else str(r[0]),
+                        "bid": float(r[1]) if r[1] is not None else None,
+                        "bid_size": r[2],
+                        "bid_exchange": r[3],
+                        "bid_condition": r[4],
+                        "ask": float(r[5]) if r[5] is not None else None,
+                        "ask_size": r[6],
+                        "ask_exchange": r[7],
+                        "ask_condition": r[8],
+                    }
+                    for r in rows
+                ]
+                return quotes, contract_id
+        except Exception as e:
+            self.logger.error("Error fetching option quotes: %s", e)
+            return [], None
+
     def insert_stocks_quote(self, records):
         """
         Inserts a list of quote tuples into the stocks.quote table.
@@ -575,6 +762,7 @@ class DatabaseConnection():
 
                 # Step 2: Handle expiration
                 all_expirations = False
+                expiration_int = 0  # only used when not all_expirations
                 if expiration == "all":
                     all_expirations = True
                     if not start_time or not end_time:
@@ -642,8 +830,8 @@ class DatabaseConnection():
                 if use_bucket:
                     params.append(interval_sql)
                 params.append(ticker_id)
-                if not all_expirations:
-                    params.append(expiration_int)
+                # if not all_expirations:
+                #     params.append(expiration_int)
                 if side:
                     params.append(side)
                 if start_time and end_time:

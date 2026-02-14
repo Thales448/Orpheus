@@ -42,6 +42,26 @@ CREATE INDEX IF NOT EXISTS idx_options_contracts_ticker_exp
 CREATE INDEX IF NOT EXISTS idx_options_contracts_lookup
     ON options.contracts (ticker_id, expiration, strike, side);
 
+-- Quote dates: which calendar dates have quote data for (ticker, expiration). Used by options ingest.
+CREATE TABLE IF NOT EXISTS options.quote_dates (
+    ticker_id   INTEGER NOT NULL REFERENCES public.tickers(id) ON DELETE CASCADE,
+    expiration  INTEGER NOT NULL,
+    quote_date  INTEGER NOT NULL,  -- YYYYMMDD
+    PRIMARY KEY (ticker_id, expiration, quote_date)
+);
+CREATE INDEX IF NOT EXISTS idx_options_quote_dates_lookup
+    ON options.quote_dates (ticker_id, expiration);
+
+-- Strikes per (ticker, expiration). Metadata from ThetaData list/strikes.
+CREATE TABLE IF NOT EXISTS options.strikes (
+    ticker_id   INTEGER NOT NULL REFERENCES public.tickers(id) ON DELETE CASCADE,
+    expiration  INTEGER NOT NULL,
+    strike      NUMERIC NOT NULL,
+    PRIMARY KEY (ticker_id, expiration, strike)
+);
+CREATE INDEX IF NOT EXISTS idx_options_strikes_lookup
+    ON options.strikes (ticker_id, expiration);
+
 -- NBBO quotes per contract (hypertable, chunked and compressed).
 -- Greeks columns are nullable; ingest can populate them later.
 CREATE TABLE IF NOT EXISTS options.quotes (
